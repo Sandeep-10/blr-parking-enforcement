@@ -1,0 +1,2902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bengaluru Parking Enforcement Intelligence Dashboard</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <!-- Custom Styling (Premium Dark Theme) -->
+  <style>
+    :root {
+      --bg-main: #07090e;
+      --bg-card: rgba(15, 22, 38, 0.75);
+      --bg-card-hover: rgba(22, 32, 56, 0.85);
+      --border-card: rgba(255, 255, 255, 0.06);
+      --border-card-focus: rgba(0, 242, 254, 0.4);
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      
+      --color-primary: #ff4a5a; /* Glowing neon red for parking violations */
+      --color-secondary: #00f2fe; /* Neon cyan for interactions/filters */
+      --color-success: #10b981; /* Emerald green for approved */
+      --color-warning: #f59e0b; /* Amber for pending review */
+      --color-rejected: #ef4444; /* Bright red for rejected */
+      
+      --font-headers: 'Space Grotesk', sans-serif;
+      --font-body: 'Inter', sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+    }
+
+    /* Scrollbar customization */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Header Panel */
+    header {
+      background: rgba(10, 15, 26, 0.85);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border-card);
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .header-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, var(--color-primary), #b91c1c);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 15px rgba(255, 74, 90, 0.4);
+    }
+
+    .logo-icon svg {
+      width: 20px;
+      height: 20px;
+      fill: #fff;
+    }
+
+    .header-title h1 {
+      font-family: var(--font-headers);
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      background: linear-gradient(to right, #ffffff, #e2e8f0);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header-title p {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .meta-badge {
+      background: rgba(0, 242, 254, 0.08);
+      border: 1px solid rgba(0, 242, 254, 0.2);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--color-secondary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .meta-badge .dot {
+      width: 6px;
+      height: 6px;
+      background-color: var(--color-secondary);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--color-secondary);
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.9); opacity: 0.5; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.5; }
+    }
+
+    /* Main Container layout */
+    .dashboard-container {
+      padding: 24px;
+      flex-grow: 1;
+      max-width: 1800px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* KPI Row */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+    }
+
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    .kpi-card:hover {
+      transform: translateY(-2px);
+      background: var(--bg-card-hover);
+      border-color: rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .kpi-icon {
+      width: 50px;
+      height: 50px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .kpi-card.volume .kpi-icon {
+      background: rgba(255, 74, 90, 0.08);
+      border: 1px solid rgba(255, 74, 90, 0.2);
+      color: var(--color-primary);
+    }
+    .kpi-card.hotspots .kpi-icon {
+      background: rgba(0, 242, 254, 0.08);
+      border: 1px solid rgba(0, 242, 254, 0.2);
+      color: var(--color-secondary);
+    }
+    .kpi-card.approval .kpi-icon {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      color: var(--color-success);
+    }
+    .kpi-card.pending .kpi-icon {
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      color: var(--color-warning);
+    }
+
+    .kpi-icon svg {
+      width: 24px;
+      height: 24px;
+      fill: currentColor;
+    }
+
+    .kpi-details {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .kpi-title {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .kpi-value {
+      font-size: 26px;
+      font-weight: 700;
+      font-family: var(--font-headers);
+      line-height: 1;
+    }
+
+    .kpi-subtext {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Core Panel Layout */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    @media (max-width: 1024px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Side Filter Panel */
+    .filter-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: sticky;
+      top: 90px;
+    }
+
+    .panel-title {
+      font-family: var(--font-headers);
+      font-size: 16px;
+      font-weight: 600;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-card);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .filter-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .filter-label svg {
+      width: 12px;
+      height: 12px;
+      fill: currentColor;
+    }
+
+    .form-control {
+      background-color: rgba(7, 10, 18, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      color: var(--text-main);
+      padding: 10px 12px;
+      font-size: 13px;
+      width: 100%;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .form-control:focus {
+      border-color: var(--color-secondary);
+      box-shadow: 0 0 8px rgba(0, 242, 254, 0.15);
+      background-color: rgba(7, 10, 18, 0.85);
+    }
+
+    select.form-control {
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 20px;
+      padding-right: 32px;
+    }
+
+    .btn-clear {
+      background: transparent;
+      border: 1px solid rgba(255, 74, 90, 0.3);
+      border-radius: 6px;
+      color: var(--color-primary);
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-clear:hover {
+      background: rgba(255, 74, 90, 0.06);
+      border-color: var(--color-primary);
+    }
+
+    .btn-clear svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
+
+    /* Score Info card inside filter panel */
+    .formula-info {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 11px;
+      color: var(--text-muted);
+      border-left: 2px solid var(--color-secondary);
+      line-height: 1.5;
+    }
+
+    .formula-info strong {
+      color: var(--text-main);
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    /* Center section grid */
+    .center-section {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .map-and-ranking-row {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 24px;
+    }
+
+    @media (max-width: 1200px) {
+      .map-and-ranking-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Map Box */
+    .map-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      position: relative;
+    }
+
+    .map-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .map-header h2 {
+      font-family: var(--font-headers);
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .map-header h2 svg {
+      width: 18px;
+      height: 18px;
+      fill: var(--color-primary);
+    }
+
+    .map-legend {
+      display: flex;
+      gap: 16px;
+      font-size: 11px;
+      color: var(--text-muted);
+      align-items: center;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend-gradient {
+      width: 70px;
+      height: 8px;
+      background: linear-gradient(to right, blue, cyan, lime, yellow, red);
+      border-radius: 4px;
+    }
+
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--color-primary);
+      box-shadow: 0 0 6px var(--color-primary);
+    }
+
+    #map {
+      height: 480px;
+      border-radius: 8px;
+      background-color: #0b0f19;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      z-index: 1;
+    }
+
+    /* Custom style for map popups */
+    .leaflet-popup-content-wrapper {
+      background: #0f172a !important;
+      color: var(--text-main) !important;
+      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+      border-radius: 8px !important;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4) !important;
+      padding: 0 !important;
+    }
+
+    .leaflet-popup-content {
+      margin: 0 !important;
+      font-family: var(--font-body);
+      width: 250px !important;
+    }
+
+    .popup-header {
+      background: linear-gradient(135deg, rgba(255, 74, 90, 0.15), rgba(15, 23, 42, 0.8));
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px 8px 0 0;
+    }
+
+    .popup-header h3 {
+      font-family: var(--font-headers);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .popup-header p {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .popup-body {
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .popup-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+    }
+
+    .popup-row span {
+      color: var(--text-muted);
+    }
+
+    .popup-row strong {
+      color: var(--text-main);
+    }
+
+    .popup-badge {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+    }
+
+    .popup-score {
+      font-family: var(--font-headers);
+      color: var(--color-secondary) !important;
+      font-weight: 600;
+    }
+
+    .leaflet-popup-tip {
+      background: #0f172a !important;
+      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+
+    .leaflet-container a.leaflet-popup-close-button {
+      color: var(--text-muted) !important;
+      padding: 8px 8px 0 0 !important;
+    }
+
+    /* Ranking Box */
+    .ranking-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      height: 540px; /* match map height + padding */
+    }
+
+    .ranking-tabs {
+      display: flex;
+      background: rgba(7, 10, 18, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 2px;
+    }
+
+    .ranking-tab {
+      flex: 1;
+      padding: 8px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.65);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      outline: none;
+      border: none;
+      background: transparent;
+    }
+
+    .ranking-tab:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .ranking-tab.active {
+      color: #ffffff;
+      background: rgba(22, 32, 56, 0.85);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .ranking-sort-controls {
+      display: flex;
+      gap: 4px;
+      background: rgba(7, 10, 18, 0.45);
+      padding: 3px;
+      border-radius: 6px;
+      overflow: hidden; /* Prevents scrollbar */
+      align-items: center;
+      flex-shrink: 0; /* Prevents container from shrinking or being overlapped by flex children */
+    }
+
+    .sort-btn {
+      flex: 1;
+      background: transparent;
+      border: 1px solid transparent; /* Pre-allocates border width to prevent layout shifting and double rendering */
+      color: rgba(255, 255, 255, 0.75); /* High contrast off-white text */
+      font-size: 11px; /* Clear legible size */
+      font-weight: 600; /* Bold weight for clearer text */
+      height: 28px; /* Fixed height forces button sizing and prevents vertical text clipping */
+      display: inline-flex; /* Flex centering forces text to display vertically and horizontally centered */
+      align-items: center;
+      justify-content: center;
+      line-height: 1; /* Eliminates vertical space inflation from body line-height */
+      border-radius: 4px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+      outline: none;
+      box-sizing: border-box;
+    }
+
+    .sort-btn:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .sort-btn.active {
+      background: rgba(0, 242, 254, 0.12);
+      color: var(--color-secondary);
+      border-color: rgba(0, 242, 254, 0.35); /* Transition border-color instead of border-width to avoid shifts */
+      font-weight: 700;
+    }
+
+    .ranking-list-container {
+      flex-grow: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 4px;
+      min-height: 0; /* Flexbox fix: allows container to shrink below content height and scroll properly */
+      flex-shrink: 1; /* Allows container to shrink to fit parent boundaries */
+      margin-top: 8px; /* Forces a physical gap between controls and list */
+    }
+
+    .ranking-item {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.03);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .ranking-item:hover {
+      background: rgba(255, 255, 255, 0.03);
+      border-color: rgba(0, 242, 254, 0.15);
+      transform: translateX(2px);
+    }
+
+    .ranking-item.selected {
+      background: rgba(0, 242, 254, 0.05);
+      border-color: var(--color-secondary);
+    }
+
+    .rank-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .rank-num-name {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      max-width: 75%;
+    }
+
+    .rank-badge {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .ranking-item:nth-child(1) .rank-badge {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--color-warning);
+    }
+    .ranking-item:nth-child(2) .rank-badge {
+      background: rgba(226, 232, 240, 0.15);
+      color: #cbd5e1;
+    }
+    .ranking-item:nth-child(3) .rank-badge {
+      background: rgba(180, 83, 9, 0.15);
+      color: #b45309;
+    }
+
+    .rank-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .rank-score {
+      font-family: var(--font-headers);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--color-secondary);
+    }
+
+    .rank-item-stats {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .rank-bar-bg {
+      height: 4px;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 2px;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .rank-bar-fill {
+      height: 100%;
+      background: linear-gradient(to right, var(--color-secondary), var(--color-primary));
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+
+    /* Charts Row */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 1024px) {
+      .charts-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .chart-header h3 {
+      font-family: var(--font-headers);
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .chart-header h3 svg {
+      width: 16px;
+      height: 16px;
+      fill: var(--color-secondary);
+    }
+
+    .chart-header span {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .chart-container {
+      position: relative;
+      height: 220px;
+      width: 100%;
+    }
+
+    .chart-info-banner {
+      background: rgba(245, 158, 11, 0.05);
+      border: 1px dashed rgba(245, 158, 11, 0.2);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 10px;
+      color: var(--color-warning);
+      line-height: 1.4;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chart-info-banner svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+      flex-shrink: 0;
+    }
+    
+    .glowing-marker-cyan {
+      filter: drop-shadow(0 0 6px var(--color-secondary));
+      animation: pulse-cyan 1.8s infinite;
+    }
+    @keyframes pulse-cyan {
+      0% { fill-opacity: 0.45; }
+      50% { fill-opacity: 0.8; }
+      100% { fill-opacity: 0.45; }
+    }
+
+    /* Custom Multi-select Dropdown styling */
+    .multiselect-container {
+      position: relative;
+      width: 100%;
+    }
+
+    .multiselect-select {
+      background-color: rgba(7, 10, 18, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      color: var(--text-main);
+      padding: 10px 12px;
+      font-size: 13px;
+      width: 100%;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: all 0.2s;
+      user-select: none;
+      box-sizing: border-box;
+    }
+
+    .multiselect-select::after {
+      content: "";
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 5px solid #94a3b8;
+      transition: transform 0.2s;
+    }
+
+    .multiselect-container.open .multiselect-select::after {
+      transform: rotate(180deg);
+    }
+
+    .multiselect-container.open .multiselect-select {
+      border-color: var(--color-secondary);
+      box-shadow: 0 0 8px rgba(0, 242, 254, 0.15);
+      background-color: rgba(7, 10, 18, 0.85);
+    }
+
+    .multiselect-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      margin-top: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 1000;
+      display: none;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      padding: 6px;
+    }
+
+    .multiselect-container.open .multiselect-dropdown {
+      display: block;
+    }
+
+    .multiselect-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      font-size: 12px;
+      color: var(--text-main);
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background 0.2s;
+      user-select: none;
+    }
+
+    .multiselect-option:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .multiselect-option input[type="checkbox"] {
+      cursor: pointer;
+      accent-color: var(--color-secondary);
+      width: 14px;
+      height: 14px;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-logo">
+      <div class="logo-icon">
+        <!-- SVG Radar/Enforcement icon -->
+        <svg viewBox="0 0 24 24">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+        </svg>
+      </div>
+      <div class="header-title">
+        <h1>Bengaluru Parking Enforcement Intelligence</h1>
+        <p>AI-Driven Illegal Parking Hotspot Detection & Priority Ranking (Hackathon Prototype)</p>
+      </div>
+    </div>
+    
+    <div class="meta-badge">
+      <span class="dot"></span>
+      <span>Live enforcement insights</span>
+    </div>
+  </header>
+
+  <div class="dashboard-container">
+    
+    <!-- KPI Row -->
+    <div class="kpi-row">
+      <div class="kpi-card volume">
+        <div class="kpi-icon">
+          <!-- Violations list icon -->
+          <svg viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+          </svg>
+        </div>
+        <div class="kpi-details">
+          <span class="kpi-title">Violations Logged</span>
+          <span class="kpi-value" id="kpi-violations">0</span>
+          <span class="kpi-subtext" id="kpi-violations-sub">Loading...</span>
+        </div>
+      </div>
+      
+      <div class="kpi-card hotspots">
+        <div class="kpi-icon">
+          <!-- Flame/Hotspot icon -->
+          <svg viewBox="0 0 24 24">
+            <path d="M12 23c-5.52 0-10-4.48-10-10C2 6 7 1 7 1s.41 1.73 1.25 3C9.42 5.8 11.5 7.5 12 8.5c.87-1.75.14-5.5.14-5.5s3.23 2.62 4.41 5.61C18.15 10.15 19 12 19 14.5c0 4.69-3.11 8.5-7 8.5zm-3.18-7.79c.67.62 1.34 1.25 2.18 1.25 1.1 0 1.5-.75 1.5-1.5 0-1.12-.87-1.87-1.25-2.25-.37-.38-.63-.75-.63-1.12 0-.25.13-.5.38-.75-.62.62-1 1.37-1 2.12 0 .87.5 1.63.82 2.25z"/>
+          </svg>
+        </div>
+        <div class="kpi-details">
+          <span class="kpi-title">Active Hotspots</span>
+          <span class="kpi-value" id="kpi-hotspots">0</span>
+          <span class="kpi-subtext" id="kpi-hotspots-sub">Loading...</span>
+        </div>
+      </div>
+      
+      <div class="kpi-card approval">
+        <div class="kpi-icon">
+          <!-- Shield/Verification icon -->
+          <svg viewBox="0 0 24 24">
+            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
+          </svg>
+        </div>
+        <div class="kpi-details">
+          <span class="kpi-title">Enforcement Confidence</span>
+          <span class="kpi-value" id="kpi-confidence">0.0%</span>
+          <span class="kpi-subtext" id="kpi-confidence-sub">Approved / Reviewed</span>
+        </div>
+      </div>
+      
+      <div class="kpi-card pending">
+        <div class="kpi-icon">
+          <!-- Clock/Timer icon -->
+          <svg viewBox="0 0 24 24">
+            <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+          </svg>
+        </div>
+        <div class="kpi-details">
+          <span class="kpi-title">Review Queue</span>
+          <span class="kpi-value" id="kpi-backlog">0.0%</span>
+          <span class="kpi-subtext" id="kpi-backlog-sub">Pending verification</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Core Grid -->
+    <div class="dashboard-grid">
+      
+      <!-- Side filters -->
+      <aside class="filter-panel">
+        <div class="panel-title">
+          <span>Control Panel</span>
+          <svg style="width:16px; height:16px; fill:var(--text-muted);" viewBox="0 0 24 24">
+            <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/>
+          </svg>
+        </div>
+
+        <!-- Scoring Mode Selection -->
+        <div class="filter-group" style="background: rgba(255, 255, 255, 0.02); padding: 12px; border-radius: 8px; border: 1px solid var(--border-card); margin-bottom: 8px;">
+          <label class="filter-label" style="color: var(--color-secondary); font-weight:700; margin-bottom: 8px; font-size:10px;">
+            <svg style="width:12px; height:12px; fill: currentColor;" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17c0 .55-.45 1-1 1s-1-.45-1-1v-2H9c-.55 0-1-.45-1-1s.45-1 1-1h4v-2H9c-1.66 0-3-1.34-3-3s1.34-3 3-3h3V5c0-.55.45-1 1-1s1 .45 1 1v2h3c.55 0 1 .45 1 1s-.45 1-1 1h-4v2h4c1.66 0 3 1.34 3 3s-1.34 3-3 3h-3v2z"/></svg>
+            Select Scoring Mode
+          </label>
+          <div class="toggle-mode-container" style="display: flex; gap: 4px; background: rgba(7, 10, 18, 0.6); padding: 3px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.05);">
+            <button id="btn-mode-volume" class="ranking-tab active" style="font-size: 11px; padding: 6px 4px; flex: 1; height: 28px; line-height: 1;" onclick="setScoringMode('volume')">Violation Vol</button>
+            <button id="btn-mode-congestion" class="ranking-tab" style="font-size: 11px; padding: 6px 4px; flex: 1; height: 28px; line-height: 1;" onclick="setScoringMode('congestion')">Congestion Proxy</button>
+          </div>
+        </div>
+
+        <!-- Text search -->
+        <div class="filter-group">
+          <label class="filter-label">
+            <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            Search Location / Station
+          </label>
+          <input type="text" id="search-filter" class="form-control" placeholder="Type Madiwala, Elite, etc..." />
+        </div>
+
+        <!-- Police Station multi-select -->
+        <div class="filter-group">
+          <label class="filter-label">
+            <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+            Police Jurisdiction (PS)
+          </label>
+          <div class="multiselect-container" id="multiselect-police-station">
+            <div class="multiselect-select" onclick="toggleMultiselect(this)">All Police Stations</div>
+            <div class="multiselect-dropdown" id="police-station-options">
+              <!-- Options populated dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Junction multi-select -->
+        <div class="filter-group">
+          <label class="filter-label">
+            <svg viewBox="0 0 24 24"><path d="M19 11h-6V5h-2v6H5v2h6v6h2v-6h6z"/></svg>
+            Junction Area
+          </label>
+          <div class="multiselect-container" id="multiselect-junction">
+            <div class="multiselect-select" onclick="toggleMultiselect(this)">All Junctions</div>
+            <div class="multiselect-dropdown" id="junction-options">
+              <!-- Options populated dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Vehicle category -->
+        <div class="filter-group">
+          <label class="filter-label">Vehicle Type</label>
+          <div class="multiselect-container" id="multiselect-vehicle">
+            <div class="multiselect-select" onclick="toggleMultiselect(this)">All Vehicles</div>
+            <div class="multiselect-dropdown" id="vehicle-options">
+              <!-- Options populated dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Violation category -->
+        <div class="filter-group">
+          <label class="filter-label">Violation Category</label>
+          <div class="multiselect-container" id="multiselect-violation">
+            <div class="multiselect-select" onclick="toggleMultiselect(this)">All Violation Types</div>
+            <div class="multiselect-dropdown" id="violation-options">
+              <!-- Options populated dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Time bucket -->
+        <div class="filter-group">
+          <label class="filter-label">Time of Day</label>
+          <div class="multiselect-container" id="multiselect-time">
+            <div class="multiselect-select" onclick="toggleMultiselect(this)">All Hours</div>
+            <div class="multiselect-dropdown" id="time-options">
+              <div class="multiselect-option"><input type="checkbox" value="Morning" onchange="onMultiselectChange('time')"><span>Morning (06:00 - 11:59)</span></div>
+              <div class="multiselect-option"><input type="checkbox" value="Afternoon" onchange="onMultiselectChange('time')"><span>Afternoon (12:00 - 15:59)</span></div>
+              <div class="multiselect-option"><input type="checkbox" value="Evening" onchange="onMultiselectChange('time')"><span>Evening (16:00 - 20:59)</span></div>
+              <div class="multiselect-option"><input type="checkbox" value="Night" onchange="onMultiselectChange('time')"><span>Night (21:00 - 05:59)</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Weekday -->
+        <div class="filter-group">
+          <label class="filter-label">Day of Week</label>
+          <div class="multiselect-container" id="multiselect-day">
+            <div class="multiselect-select" onclick="toggleMultiselect(this)">All Days</div>
+            <div class="multiselect-dropdown" id="day-options">
+              <div class="multiselect-option"><input type="checkbox" value="0" onchange="onMultiselectChange('day')"><span>Monday</span></div>
+              <div class="multiselect-option"><input type="checkbox" value="1" onchange="onMultiselectChange('day')"><span>Tuesday</span></div>
+              <div class="multiselect-option"><input type="checkbox" value="2" onchange="onMultiselectChange('day')"><span>Wednesday</span></div>
+              <div class="multiselect-option"><input type="checkbox" value="3" onchange="onMultiselectChange('day')"><span>Thursday</span></div>
+              <div class="multiselect-option"><input type="checkbox" value="4" onchange="onMultiselectChange('day')"><span>Friday</span></div>
+              <div class="multiselect-option"><input type="checkbox" value="5" onchange="onMultiselectChange('day')"><span>Saturday</span></div>
+              <div class="multiselect-option"><input type="checkbox" value="6" onchange="onMultiselectChange('day')"><span>Sunday</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Validation Status -->
+        <div class="filter-group">
+          <label class="filter-label">Validation Status</label>
+          <div class="multiselect-container" id="multiselect-status">
+            <div class="multiselect-select" onclick="toggleMultiselect(this)">All Statuses</div>
+            <div class="multiselect-dropdown" id="status-options">
+              <div class="multiselect-option"><input type="checkbox" value="Approved" onchange="onMultiselectChange('status')"><span>Approved (Confirmed)</span></div>
+              <div class="multiselect-option"><input type="checkbox" value="Rejected" onchange="onMultiselectChange('status')"><span>Rejected (Noise/Invalid)</span></div>
+              <div class="multiselect-option"><input type="checkbox" value="Pending Review" onchange="onMultiselectChange('status')"><span>Pending Review</span></div>
+            </div>
+          </div>
+        </div>
+
+        <button id="btn-clear-filters" class="btn-clear">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          Reset All Filters
+        </button>
+
+        <div class="formula-info" id="formula-desc">
+          <strong>Composite Hotspot Score</strong>
+          Priority score is computed dynamically based on the active dataset:
+          <div style="margin-top: 6px; font-family: monospace; font-size: 10px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: 4px;">
+            0.4 * Vol + 0.3 * Appr + 0.3 * Chronic
+          </div>
+          <ul style="margin-top: 6px; padding-left: 14px; display: flex; flex-direction: column; gap: 4px; font-size: 10px;">
+            <li><strong>Volume (40%):</strong> Density, capped at 500.</li>
+            <li><strong>Approval (30%):</strong> Verification rate.</li>
+            <li><strong>Chronicity (30%):</strong> Non-peak-day activity share.</li>
+          </ul>
+        </div>
+      </aside>
+
+      <!-- Center container -->
+      <main class="center-section">
+        
+        <!-- Map and Ranking table row -->
+        <div class="map-and-ranking-row">
+          
+          <!-- Heatmap Container -->
+          <div class="map-card">
+            <div class="map-header">
+              <h2>
+                <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                Bengaluru Violation Hotspot Map
+              </h2>
+              <div class="map-legend">
+                <div class="legend-item">
+                  <span id="legend-density-label">Density:</span>
+                  <div class="legend-gradient" id="legend-density-bar"></div>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot" id="legend-dot-icon"></div>
+                  <span id="legend-dot-label">High-Priority Hotspots</span>
+                </div>
+              </div>
+            </div>
+            <div id="map"></div>
+          </div>
+          
+          <!-- Ranking Panel -->
+          <div class="ranking-card">
+            <div class="ranking-tabs">
+              <button class="ranking-tab active" id="tab-ps" onclick="switchRankingTab('police_station')">Police Stations</button>
+              <button class="ranking-tab" id="tab-junc" onclick="switchRankingTab('junction')">Junctions</button>
+              <button class="ranking-tab" id="tab-patrol" onclick="switchRankingTab('patrol')">Patrol Spikes</button>
+            </div>
+            
+            <div class="ranking-sort-controls">
+              <button class="sort-btn active" id="sort-btn-score" onclick="setRankingSort('score')">Priority</button>
+              <button class="sort-btn" onclick="setRankingSort('count')">Volume</button>
+              <button class="sort-btn" onclick="setRankingSort('approval_rate')">Approval</button>
+              <button class="sort-btn" onclick="setRankingSort('repeat_rate')">Chronic</button>
+            </div>
+
+            <!-- Dynamic Explanation Banner -->
+            <div id="ranking-explanation" style="background: rgba(255, 255, 255, 0.02); border: 1px dashed rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 10px; font-size: 10px; color: var(--text-muted); line-height: 1.4; margin-top: 4px; margin-bottom: 2px;">
+              <!-- Dynamically populated explanation text -->
+            </div>
+            
+            <div id="ranking-list" class="ranking-list-container">
+              <!-- Dynamically populated ranking items -->
+            </div>
+          </div>
+          
+        </div>
+
+        <!-- Temporal Predictions Card -->
+        <div class="chart-card" id="prediction-panel" style="padding: 20px; display: grid; grid-template-columns: 1fr;">
+          <div class="chart-header">
+            <h3 style="font-family: var(--font-headers); font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; color: var(--color-secondary);">
+              <svg style="width: 16px; height: 16px; fill: currentColor;" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0-2-.9-2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+              Time-Pattern Predictor (Spike Alerts)
+            </h3>
+            <span id="prediction-hotspot-label" style="font-size: 11px; color: var(--text-muted); font-weight: 600;">Select a hotspot on the map to load predictions</span>
+          </div>
+
+          <!-- Query Controls -->
+          <div class="prediction-controls" style="display: flex; gap: 12px; margin-top: 10px; margin-bottom: 6px; align-items: center; background: rgba(7, 10, 18, 0.4); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.04); flex-wrap: wrap;">
+            <span style="font-size: 11px; font-weight: 600; color: var(--text-main);">Query Target:</span>
+            
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <label style="font-size: 10px; color: var(--text-muted);">Entity:</label>
+              <select id="pred-entity-select" class="form-control" style="width: 180px; padding: 4px 8px; font-size: 11px; height: 26px;" onchange="onPredictionEntityChange()">
+                <option value="map">Selected Map Hotspot</option>
+              </select>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <label style="font-size: 10px; color: var(--text-muted);">Weekday:</label>
+              <select id="pred-dow-select" class="form-control" style="width: 130px; padding: 4px 8px; font-size: 11px; height: 26px;" onchange="onPredictionTimeChange()">
+                <option value="0">Monday</option>
+                <option value="1">Tuesday</option>
+                <option value="2">Wednesday</option>
+                <option value="3">Thursday</option>
+                <option value="4">Friday</option>
+                <option value="5">Saturday</option>
+                <option value="6">Sunday</option>
+              </select>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <label style="font-size: 10px; color: var(--text-muted);">Hour:</label>
+              <select id="pred-hour-select" class="form-control" style="width: 100px; padding: 4px 8px; font-size: 11px; height: 26px;" onchange="onPredictionTimeChange()">
+              </select>
+            </div>
+            
+            <button class="btn-clear" style="width: auto; padding: 4px 10px; font-size: 10px; height: 26px; border-color: rgba(0, 242, 254, 0.3); color: var(--color-secondary); margin: 0;" onclick="resetPredictionTimeToNow()">
+              Use Live Time
+            </button>
+          </div>
+          
+          <div id="prediction-placeholder" style="text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 12px; border: 1px dashed rgba(255, 255, 255, 0.08); border-radius: 8px; margin-top: 10px;">
+            💡 Click on any circle marker on the map or select a patrol spike above to plot hourly temporal predictions and pre-positioning alerts.
+          </div>
+
+          <div id="prediction-content" style="display: none; grid-template-columns: 2fr 1fr; gap: 24px; margin-top: 12px;">
+            <div class="chart-container" style="height: 220px;">
+              <canvas id="chart-predictions"></canvas>
+            </div>
+            
+            <div style="background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-card); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; font-size: 11px;">
+              <div>
+                <strong style="color: var(--text-main); font-size: 12px; display: block; margin-bottom: 4px;">Patrol Pre-Position Alert</strong>
+                <span id="prediction-alert-text" style="color: var(--text-muted); line-height: 1.4; display: block;"></span>
+              </div>
+              
+              <div id="prediction-sample-warning" style="display: none; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2); color: var(--color-warning); padding: 8px; border-radius: 4px; line-height: 1.3;">
+                ⚠️ <strong>Thinly Sampled:</strong> This hotspot has very sparse historical data (&lt; 6 active weeks). Prediction confidence is LOW.
+              </div>
+
+              <div style="margin-top: auto; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
+                <span style="font-size: 8px; color: var(--text-muted); display: block; line-height: 1.3;">
+                  ℹ️ <strong>Honest Model Validation Disclosure:</strong><br>
+                  This displays expected hourly violation rate averages. Test period validation yields a Mean Absolute Error of <strong>2.19 violations/hr</strong> (a <strong>4.15% error reduction</strong> over a naive overall average). No live traffic sensors are used.
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts row -->
+        <div class="charts-row">
+          
+          <!-- Hour chart (wide) -->
+          <div class="chart-card">
+            <div class="chart-header">
+              <h3>
+                <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm.5 13H11v-6h1.5v6zm0-8H11V5h1.5v2z"/></svg>
+                Hourly Temporal Profile (IST)
+              </h3>
+              <span id="chart-hour-filtered-label">Filtered Dataset</span>
+            </div>
+            <div class="chart-info-banner">
+              <!-- Exclamation warning svg -->
+              <svg viewBox="0 0 24 24">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+              </svg>
+              <span><strong>Anomalous Nighttime Peak Detected (02:00 - 05:00):</strong> This represents ~40% of logs, likely due to automated camera synchronizations or batch uploads of offline daytime reports. Actual traffic density peak occurs between 08:00 and 13:00.</span>
+            </div>
+            <div class="chart-container">
+              <canvas id="chart-hours"></canvas>
+            </div>
+          </div>
+
+          <!-- Vehicle mix chart -->
+          <div class="chart-card">
+            <div class="chart-header">
+              <h3>
+                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+                Vehicle Mix
+              </h3>
+            </div>
+            <div class="chart-container">
+              <canvas id="chart-vehicles"></canvas>
+            </div>
+          </div>
+
+          <!-- Validation status chart -->
+          <div class="chart-card">
+            <div class="chart-header">
+              <h3>
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                Validation Status
+              </h3>
+            </div>
+            <div class="chart-container">
+              <canvas id="chart-status"></canvas>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Methodology Card -->
+        <div class="chart-card" style="background: var(--bg-card); border: 1px solid var(--border-card); margin-top: 10px; padding: 20px; grid-column: 1 / -1;">
+          <h3 style="font-family: var(--font-headers); font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; color: var(--color-secondary);">
+            <svg style="width: 18px; height: 18px; fill: currentColor;" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+            Methodology & Calibration Disclosures (Proxy Model)
+          </h3>
+          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-top: 12px; font-size: 12px; line-height: 1.5; color: var(--text-muted);">
+            <div>
+              <p style="margin-bottom: 10px;">
+                <strong style="color: var(--text-main);">Why is this a Proxy Model?</strong><br>
+                The enforcement agency's violation dataset does not contain real-world vehicle travel times, speeds, or delays. To prevent losing credibility by overclaiming precision, this scoring layer uses <strong>OpenStreetMap road geometry, lane capacities, and transit proximity</strong> to model the <em>potential</em> traffic-flow impact of illegal parking.
+              </p>
+              <p style="margin-bottom: 10px;">
+                <strong style="color: var(--text-main);">Scoring Formula:</strong><br>
+                <code style="background: rgba(0,0,0,0.3); padding: 4px 6px; border-radius: 4px; color: var(--color-primary); font-family: monospace;">
+                  Congestion Impact = Density × Narrowness Penalty × (1 + Peak Hour Overlap) × (1 + POI Proximity Score)
+                </code>
+              </p>
+              <ul style="padding-left: 16px; margin-top: 6px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
+                <li><strong>Violation Density:</strong> Normalized parking violation frequency per grid cell (56m resolution).</li>
+                <li><strong>Narrowness Penalty:</strong> Scaled inverse of road capacity (derived from OSM tags: <code style="color:var(--text-main)">highway_type × lanes</code>). Narrower streets carry a higher penalty.</li>
+                <li><strong>Peak Hour Overlap:</strong> Share of violations logged during observed daytime traffic rush hours (8-11 AM and 5-8 PM IST).</li>
+                <li><strong>POI Proximity:</strong> Distance-decay sum of nearby metro stations, bus stops/stations, and markets within 300m.</li>
+              </ul>
+            </div>
+            <div style="background: rgba(0, 0, 0, 0.2); border-left: 3px solid var(--color-primary); padding: 12px; border-radius: 4px;">
+              <strong style="color: var(--text-main);">v2 Roadmap (Real-World Calibration):</strong>
+              <p style="margin-top: 6px; font-size: 11px;">
+                To transition this model from a proxy score to a validated traffic-flow index, the next product iteration requires:
+              </p>
+              <ol style="padding-left: 14px; margin-top: 6px; font-size: 11px; display: flex; flex-direction: column; gap: 4px; list-style-type: decimal;">
+                <li><strong>Google Maps Directions API:</strong> Querying historical travel times along snapped road segments during peak vs. off-peak hours to measure actual speed deltas.</li>
+                <li><strong>Live Traffic Layers:</strong> Correlating vehicle densities with live traffic speeds near active hotspots.</li>
+                <li><strong>Sensory Calibration:</strong> Snapping camera logs to road-side induction loops or microwave radar vehicle counters.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+      </main>
+
+    </div>
+
+  </div>
+
+  <!-- Load Data -->
+  <script src="dashboard_data.js"></script>
+
+  <!-- Leaflet and Plugins CDN -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Interactive JavaScript logic -->
+  <script>
+    // State Variables
+    let map = null;
+    let heatLayer = null;
+    let hotspotMarkersGroup = null;
+    
+    let activeScoringMode = 'volume'; // 'volume' or 'congestion'
+    let activeRankingTab = 'police_station'; // 'police_station' or 'junction'
+    let activeRankingSort = 'score'; // 'score', 'count', 'approval_rate', 'repeat_rate'
+    
+    let chartHours = null;
+    let chartVehicles = null;
+    let chartStatus = null;
+    let chartPredictions = null;
+    let selectedHotspotId = null;
+    let predictionSelectedDOW = (new Date().getDay() + 6) % 7;
+    let predictionSelectedHour = new Date().getHours();
+    let selectedPredictionEntity = { type: 'map', name: '' };
+
+    // Filters State
+    let activeFilters = {
+      search: '',
+      vehicles: [],
+      violations: [],
+      time_buckets: [],
+      days_of_week: [],
+      statuses: [],
+      police_stations: [],
+      junctions: []
+    };
+
+    // Derived Centers (computed dynamically on startup)
+    const psCenters = {};
+    const juncCenters = {};
+
+    // Initialization on window load
+    window.addEventListener('DOMContentLoaded', () => {
+      initDropdowns();
+      initDerivedCenters();
+      initMap();
+      initCharts();
+      initPredictionDropdowns();
+      
+      // Setup event listeners for filters
+      document.getElementById('search-filter').addEventListener('input', (e) => {
+        activeFilters.search = e.target.value.trim();
+        updateDashboard();
+      });
+      document.getElementById('btn-clear-filters').addEventListener('click', resetFilters);
+
+      // Initial Render
+      updateDashboard();
+    });
+
+    // Populate dropdowns with categories from data
+    function initDropdowns() {
+      const vDropdown = document.getElementById('vehicle-options');
+      if (vDropdown) {
+        vDropdown.innerHTML = '';
+        CATEGORY_MAPS.vehicles.forEach(veh => {
+          const div = document.createElement('div');
+          div.className = 'multiselect-option';
+          const label = veh.replace('MOTOR CYCLE', 'MOTORCYCLE');
+          div.innerHTML = `<input type="checkbox" value="${veh}" onchange="onMultiselectChange('vehicle')"><span>${label}</span>`;
+          vDropdown.appendChild(div);
+        });
+      }
+
+      const violDropdown = document.getElementById('violation-options');
+      if (violDropdown) {
+        violDropdown.innerHTML = '';
+        CATEGORY_MAPS.violations.forEach(viol => {
+          const div = document.createElement('div');
+          div.className = 'multiselect-option';
+          const label = viol.toLowerCase().replace(/(^\w|\s\w)/g, m => m.toUpperCase()); // title case
+          div.innerHTML = `<input type="checkbox" value="${viol}" onchange="onMultiselectChange('violation')"><span>${label}</span>`;
+          violDropdown.appendChild(div);
+        });
+      }
+
+      const psDropdown = document.getElementById('police-station-options');
+      if (psDropdown) {
+        psDropdown.innerHTML = '';
+        const sortedPS = [...POLICE_STATIONS_DATA].sort((a, b) => a.name.localeCompare(b.name));
+        sortedPS.forEach(ps => {
+          const div = document.createElement('div');
+          div.className = 'multiselect-option';
+          div.innerHTML = `<input type="checkbox" value="${ps.name}" onchange="onMultiselectChange('police-station')"><span>${ps.name} PS</span>`;
+          psDropdown.appendChild(div);
+        });
+      }
+
+      const juncDropdown = document.getElementById('junction-options');
+      if (juncDropdown) {
+        juncDropdown.innerHTML = '';
+        const sortedJunc = [...JUNCTIONS_DATA].filter(j => j.name !== 'No Junction').sort((a, b) => a.name.localeCompare(b.name));
+        sortedJunc.forEach(junc => {
+          const div = document.createElement('div');
+          div.className = 'multiselect-option';
+          div.innerHTML = `<input type="checkbox" value="${junc.name}" onchange="onMultiselectChange('junction')"><span>${junc.name}</span>`;
+          juncDropdown.appendChild(div);
+        });
+      }
+    }
+
+    // Toggle dropdown visibility
+    function toggleMultiselect(el) {
+      const container = el.parentElement;
+      
+      // Close other multiselects first
+      document.querySelectorAll('.multiselect-container').forEach(c => {
+        if (c !== container) c.classList.remove('open');
+      });
+
+      container.classList.toggle('open');
+    }
+
+    // Close dropdowns when clicking outside
+    window.addEventListener('click', (e) => {
+      if (!e.target.closest('.multiselect-container')) {
+        document.querySelectorAll('.multiselect-container').forEach(c => c.classList.remove('open'));
+      }
+    });
+
+    // Handle multiselect change
+    function onMultiselectChange(filterType) {
+      const container = document.getElementById(`multiselect-${filterType}`);
+      if (!container) return;
+      
+      const selectBox = container.querySelector('.multiselect-select');
+      const checkboxes = container.querySelectorAll('.multiselect-dropdown input[type="checkbox"]');
+      const selected = [];
+      
+      checkboxes.forEach(cb => {
+        if (cb.checked) selected.push(cb.value);
+      });
+
+      // Update active filters
+      if (filterType === 'vehicle') {
+        activeFilters.vehicles = selected;
+        selectBox.textContent = selected.length === 0 ? 'All Vehicles' : (selected.length <= 2 ? selected.join(', ').replace('MOTOR CYCLE', 'MOTORCYCLE') : `${selected.length} Selected`);
+      } else if (filterType === 'violation') {
+        activeFilters.violations = selected;
+        selectBox.textContent = selected.length === 0 ? 'All Violation Types' : (selected.length <= 2 ? selected.join(', ').toLowerCase().replace(/(^\w|\s\w)/g, m => m.toUpperCase()) : `${selected.length} Selected`);
+      } else if (filterType === 'time') {
+        activeFilters.time_buckets = selected;
+        selectBox.textContent = selected.length === 0 ? 'All Hours' : (selected.length <= 2 ? selected.join(', ') : `${selected.length} Selected`);
+      } else if (filterType === 'day') {
+        activeFilters.days_of_week = selected;
+        const dayNames = selected.map(val => CATEGORY_MAPS.weekdays[parseInt(val)].slice(0, 3));
+        selectBox.textContent = selected.length === 0 ? 'All Days' : (selected.length <= 2 ? dayNames.join(', ') : `${selected.length} Selected`);
+      } else if (filterType === 'status') {
+        activeFilters.statuses = selected;
+        selectBox.textContent = selected.length === 0 ? 'All Statuses' : (selected.length <= 2 ? selected.join(', ') : `${selected.length} Selected`);
+      } else if (filterType === 'police-station') {
+        activeFilters.police_stations = selected;
+        selectBox.textContent = selected.length === 0 ? 'All Police Stations' : (selected.length <= 2 ? selected.join(', ') : `${selected.length} Selected`);
+      } else if (filterType === 'junction') {
+        activeFilters.junctions = selected;
+        selectBox.textContent = selected.length === 0 ? 'All Junctions' : (selected.length <= 2 ? selected.join(', ') : `${selected.length} Selected`);
+      }
+
+      updateDashboard();
+    }
+
+    // Pre-calculate centers of gravity for zoom interactions
+    function initDerivedCenters() {
+      HOTSPOTS_DATA.forEach(h => {
+        // Police Station centers
+        if (!psCenters[h.police_station]) {
+          psCenters[h.police_station] = { latSum: 0, lonSum: 0, count: 0 };
+        }
+        psCenters[h.police_station].latSum += h.lat;
+        psCenters[h.police_station].lonSum += h.lon;
+        psCenters[h.police_station].count++;
+
+        // Junction centers
+        if (h.junction && h.junction !== 'No Junction') {
+          if (!juncCenters[h.junction]) {
+            juncCenters[h.junction] = { latSum: 0, lonSum: 0, count: 0 };
+          }
+          juncCenters[h.junction].latSum += h.lat;
+          juncCenters[h.junction].lonSum += h.lon;
+          juncCenters[h.junction].count++;
+        }
+      });
+
+      // Divide sums to get actual mean coordinates
+      for (const ps in psCenters) {
+        psCenters[ps].lat = psCenters[ps].latSum / psCenters[ps].count;
+        psCenters[ps].lon = psCenters[ps].lonSum / psCenters[ps].count;
+      }
+      for (const j in juncCenters) {
+        juncCenters[j].lat = juncCenters[j].latSum / juncCenters[j].count;
+        juncCenters[j].lon = juncCenters[j].lonSum / juncCenters[j].count;
+      }
+    }
+
+    // Initialize Leaflet Map
+    function initMap() {
+      // Center of Bengaluru
+      map = L.map('map', {
+        zoomControl: true,
+        scrollWheelZoom: true,
+        minZoom: 10,
+        maxZoom: 18
+      }).setView([12.9716, 77.5946], 12);
+
+      // Premium Dark Tiles
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20
+      }).addTo(map);
+
+      // Create overlay groups
+      heatLayer = L.heatLayer([], {
+        radius: 18,
+        blur: 15,
+        maxZoom: 14,
+        gradient: {0.2: 'blue', 0.4: 'cyan', 0.6: 'lime', 0.8: 'yellow', 1.0: 'red'}
+      }).addTo(map);
+
+      hotspotMarkersGroup = L.layerGroup().addTo(map);
+    }
+
+    // Reset all filter controls
+    function resetFilters() {
+      activeFilters.search = '';
+      activeFilters.vehicles = [];
+      activeFilters.violations = [];
+      activeFilters.time_buckets = [];
+      activeFilters.days_of_week = [];
+      activeFilters.statuses = [];
+      activeFilters.police_stations = [];
+      activeFilters.junctions = [];
+
+      document.getElementById('search-filter').value = '';
+      
+      // Uncheck all checkboxes
+      document.querySelectorAll('.multiselect-dropdown input[type="checkbox"]').forEach(cb => cb.checked = false);
+      
+      // Reset select texts
+      document.getElementById('multiselect-vehicle').querySelector('.multiselect-select').textContent = 'All Vehicles';
+      document.getElementById('multiselect-violation').querySelector('.multiselect-select').textContent = 'All Violation Types';
+      document.getElementById('multiselect-time').querySelector('.multiselect-select').textContent = 'All Hours';
+      document.getElementById('multiselect-day').querySelector('.multiselect-select').textContent = 'All Days';
+      document.getElementById('multiselect-status').querySelector('.multiselect-select').textContent = 'All Statuses';
+      document.getElementById('multiselect-police-station').querySelector('.multiselect-select').textContent = 'All Police Stations';
+      document.getElementById('multiselect-junction').querySelector('.multiselect-select').textContent = 'All Junctions';
+
+      updateDashboard();
+      
+      // Fit map back to full city bounds
+      map.setView([12.9716, 77.5946], 12);
+    }
+
+    // core computation: filters and aggregates records in one single loop (~15-20ms)
+    function getFilteredData() {
+      const startTime = performance.now();
+      
+      const vFilterActive = activeFilters.vehicles.length > 0;
+      const vFilterIndices = new Set(activeFilters.vehicles.map(v => CATEGORY_MAPS.vehicles.indexOf(v)));
+
+      const violFilterActive = activeFilters.violations.length > 0;
+      const violFilterIndices = new Set(activeFilters.violations.map(v => CATEGORY_MAPS.violations.indexOf(v)));
+
+      const statusFilterActive = activeFilters.statuses.length > 0;
+      const statusFilterIndices = new Set(activeFilters.statuses.map(s => CATEGORY_MAPS.status.indexOf(s)));
+
+      const dayFilterActive = activeFilters.days_of_week.length > 0;
+      const dayFilterIndices = new Set(activeFilters.days_of_week.map(d => parseInt(d)));
+
+      const timeFilterActive = activeFilters.time_buckets.length > 0;
+
+      const psFilterActive = activeFilters.police_stations.length > 0;
+      const psFilterSet = new Set(activeFilters.police_stations);
+
+      const juncFilterActive = activeFilters.junctions.length > 0;
+      const juncFilterSet = new Set(activeFilters.junctions);
+
+      // Aggregate targets
+      let filteredCount = 0;
+      const hCounts = new Array(HOTSPOTS_DATA.length).fill(0);
+      const hApproved = new Array(HOTSPOTS_DATA.length).fill(0);
+      const hRejected = new Array(HOTSPOTS_DATA.length).fill(0);
+      const hPeak = new Array(HOTSPOTS_DATA.length).fill(0); // Peak rush hour violations
+      
+      const hourlyStats = new Array(24).fill(0);
+      const vehicleStats = new Array(CATEGORY_MAPS.vehicles.length).fill(0);
+      const statusStats = new Array(CATEGORY_MAPS.status.length).fill(0);
+
+      // Single-pass scanner over all 162k records
+      for (let i = 0; i < FILTER_RECORDS.length; i++) {
+        const rec = FILTER_RECORDS[i];
+        const hIdx = rec[0];
+        const hour = rec[1];
+        const day = rec[2];
+        const veh = rec[3];
+        const viol = rec[4];
+        const stat = rec[5];
+        const count = rec[6];
+
+        // 1. Time bucket filter
+        if (timeFilterActive) {
+          let timeMatch = false;
+          if (activeFilters.time_buckets.includes('Morning') && hour >= 6 && hour < 12) timeMatch = true;
+          if (activeFilters.time_buckets.includes('Afternoon') && hour >= 12 && hour < 16) timeMatch = true;
+          if (activeFilters.time_buckets.includes('Evening') && hour >= 16 && hour < 21) timeMatch = true;
+          if (activeFilters.time_buckets.includes('Night') && (hour >= 21 || hour < 6)) timeMatch = true;
+          if (!timeMatch) continue;
+        }
+
+        // 2. Day of week filter
+        if (dayFilterActive && !dayFilterIndices.has(day)) continue;
+
+        // 3. Vehicle type filter
+        if (vFilterActive && !vFilterIndices.has(veh)) continue;
+
+        // 4. Violation type filter
+        if (violFilterActive && !violFilterIndices.has(viol)) continue;
+
+        // 5. Status filter
+        if (statusFilterActive && !statusFilterIndices.has(stat)) continue;
+
+        // Hotspot details for location filtering
+        const hotspot = HOTSPOTS_DATA[hIdx];
+
+        // 6. Police station level filter
+        if (psFilterActive && !psFilterSet.has(hotspot.police_station)) continue;
+
+        // 7. Junction level filter
+        if (juncFilterActive && !juncFilterSet.has(hotspot.junction)) continue;
+
+        // 8. Text search filter (search inside location, station or junction names)
+        if (activeFilters.search !== '') {
+          const searchStr = activeFilters.search.toLowerCase();
+          const match = hotspot.location.toLowerCase().includes(searchStr) || 
+                        hotspot.police_station.toLowerCase().includes(searchStr) || 
+                        hotspot.junction.toLowerCase().includes(searchStr);
+          if (!match) continue;
+        }
+
+        // --- Accumulate aggregations ---
+        filteredCount += count;
+        hCounts[hIdx] += count;
+        
+        if (stat === 0) hApproved[hIdx] += count;
+        else if (stat === 1) hRejected[hIdx] += count;
+
+        // Peak rush hours: 8-11 AM and 5-8 PM IST
+        if ((hour >= 8 && hour < 11) || (hour >= 17 && hour < 20)) {
+          hPeak[hIdx] += count;
+        }
+
+        hourlyStats[hour] += count;
+        vehicleStats[veh] += count;
+        statusStats[stat] += count;
+      }
+
+      const duration = performance.now() - startTime;
+      // console.log(`Data filtering took ${duration.toFixed(1)}ms`);
+
+      return {
+        totalViolations: filteredCount,
+        hotspotCounts: hCounts,
+        hotspotApproved: hApproved,
+        hotspotRejected: hRejected,
+        hotspotPeak: hPeak,
+        hourlyStats: hourlyStats,
+        vehicleStats: vehicleStats,
+        statusStats: statusStats
+      };
+    }
+
+    // Update the entire dashboard elements
+    function updateDashboard() {
+      const data = getFilteredData();
+      
+      updateKPIs(data);
+      updateHeatmapAndMarkers(data);
+      updateRankings(data);
+      updateChartsData(data);
+    }
+
+    // Formatter helpers
+    const formatNum = (num) => new Intl.NumberFormat('en-IN').format(num);
+    const formatPct = (num) => `${(num * 100).toFixed(1)}%`;
+
+    // KPI Cards rendering
+    function updateKPIs(data) {
+      document.getElementById('kpi-violations').textContent = formatNum(data.totalViolations);
+      
+      // Active hotspots count (how many hotspots have > 0 counts in this filtered view)
+      let activeHotspotCount = 0;
+      for (let i = 0; i < data.hotspotCounts.length; i++) {
+        if (data.hotspotCounts[i] > 0) activeHotspotCount++;
+      }
+      document.getElementById('kpi-hotspots').textContent = formatNum(activeHotspotCount);
+
+      // subtexts
+      const totalBaseline = SYSTEM_INFO.total_raw_violations;
+      const percentShare = ((data.totalViolations / totalBaseline) * 100).toFixed(1);
+      document.getElementById('kpi-violations-sub').textContent = `${percentShare}% of city baseline`;
+      document.getElementById('kpi-hotspots-sub').textContent = `Out of ${formatNum(HOTSPOTS_DATA.length)} total spots`;
+
+      // Approval rate (confidence)
+      const approved = data.statusStats[0] || 0;
+      const rejected = data.statusStats[1] || 0;
+      const pending = data.statusStats[2] || 0;
+      
+      const totalReviewed = approved + rejected;
+      const approvalRate = totalReviewed > 0 ? (approved / totalReviewed) : SYSTEM_INFO.global_avg_approval;
+      document.getElementById('kpi-confidence').textContent = formatPct(approvalRate);
+      document.getElementById('kpi-confidence-sub').textContent = `${formatNum(totalReviewed)} reviewed reports`;
+
+      // Backlog rate
+      const pendingRate = data.totalViolations > 0 ? (pending / data.totalViolations) : 0;
+      document.getElementById('kpi-backlog').textContent = formatPct(pendingRate);
+      document.getElementById('kpi-backlog-sub').textContent = `${formatNum(pending)} pending review`;
+    }
+
+    // Map Updates (Heatmap + Hotspot popup markers)
+    function updateHeatmapAndMarkers(data) {
+      // 1. Heatmap points
+      const heatPoints = [];
+      let maxCount = 1;
+      
+      for (let i = 0; i < HOTSPOTS_DATA.length; i++) {
+        const count = data.hotspotCounts[i];
+        if (count > 0) {
+          if (activeScoringMode === 'volume') {
+            if (count > maxCount) maxCount = count;
+            heatPoints.push([HOTSPOTS_DATA[i].lat, HOTSPOTS_DATA[i].lon, count]);
+          } else {
+            const score = HOTSPOTS_DATA[i].congestion_score;
+            if (score > maxCount) maxCount = score;
+            heatPoints.push([HOTSPOTS_DATA[i].lat, HOTSPOTS_DATA[i].lon, score]);
+          }
+        }
+      }
+
+      // Set max intensity scale dynamically so it remains rich visually when filtered
+      heatLayer.setLatLngs(heatPoints);
+      heatLayer.setOptions({ max: maxCount * 0.8 });
+      
+      // Update heatmap gradient dynamically based on mode
+      if (activeScoringMode === 'volume') {
+        heatLayer.setOptions({ gradient: {0.2: 'blue', 0.4: 'cyan', 0.6: 'lime', 0.8: 'yellow', 1.0: 'red'} });
+      } else {
+        heatLayer.setOptions({ gradient: {0.2: 'navy', 0.4: 'blue', 0.6: 'deepskyblue', 0.8: 'cyan', 1.0: 'white'} });
+      }
+
+      // 2. Hotspot Markers (top 50 hotspots based on filtered count/score)
+      hotspotMarkersGroup.clearLayers();
+      
+      // Pair hotspots with their filtered count/score
+      const activeHotspots = [];
+      for (let i = 0; i < HOTSPOTS_DATA.length; i++) {
+        const count = data.hotspotCounts[i];
+        if (count > 0) {
+          const approved = data.hotspotApproved[i];
+          const rejected = data.hotspotRejected[i];
+          const reviewed = approved + rejected;
+          const appRate = reviewed > 0 ? (approved / reviewed) : HOTSPOTS_DATA[i].approval_rate;
+          
+          const peakCount = data.hotspotPeak[i];
+          const peakOverlap = count > 0 ? (peakCount / count) : HOTSPOTS_DATA[i].peak_overlap;
+          
+          const volumeScore = Math.min(100.0, (count / 100.0) * 100.0);
+          const day1Score = (0.40 * volumeScore) + (0.30 * appRate * 100.0) + (0.30 * HOTSPOTS_DATA[i].repeat_rate * 100.0);
+          
+          // Re-calculate dynamic Congestion Score
+          // Formula: Density * Narrowness * (1 + PeakOverlap) * (1 + POIs)
+          const densityNorm = count / 2512.0; // 2512 is city max
+          const narrowness = HOTSPOTS_DATA[i].narrowness_norm;
+          const poiScore = HOTSPOTS_DATA[i].poi_score_norm;
+          const rawScore = densityNorm * narrowness * (1.0 + peakOverlap) * (1.0 + poiScore);
+          // 0.820 is the max baseline rawScore mapping to 100
+          const congestionScore = Math.min(100.0, (rawScore / 0.820) * 100.0);
+          
+          activeHotspots.push({
+            idx: i,
+            meta: HOTSPOTS_DATA[i],
+            count: count,
+            approved: approved,
+            rejected: rejected,
+            peakOverlap: peakOverlap,
+            day1Score: day1Score,
+            congestionScore: congestionScore
+          });
+        }
+      }
+
+      // Sort descending based on mode and take top 50
+      if (activeScoringMode === 'volume') {
+        activeHotspots.sort((a, b) => b.count - a.count);
+      } else {
+        activeHotspots.sort((a, b) => b.congestionScore - a.congestionScore);
+      }
+      
+      const topHotspots = activeHotspots.slice(0, 50);
+      const activeMaxVal = activeScoringMode === 'volume' ? maxCount : 100.0;
+
+      topHotspots.forEach(item => {
+        const h = item.meta;
+        const score = activeScoringMode === 'volume' ? item.day1Score : item.congestionScore;
+        
+        // Calculate dynamic approval rate
+        const reviewed = item.approved + item.rejected;
+        const appRate = reviewed > 0 ? (item.approved / reviewed) : h.approval_rate;
+        
+        // Marker size relative to count or score
+        let markerRadius;
+        if (activeScoringMode === 'volume') {
+          markerRadius = Math.max(6, Math.min(25, 4 + (item.count / activeMaxVal) * 18));
+        } else {
+          markerRadius = Math.max(6, Math.min(25, 4 + (item.congestionScore / 100.0) * 18));
+        }
+
+        const markerColor = activeScoringMode === 'volume' ? 'var(--color-primary)' : 'var(--color-secondary)';
+
+        const marker = L.circleMarker([h.lat, h.lon], {
+          radius: markerRadius,
+          fillColor: markerColor,
+          color: 'var(--text-main)',
+          weight: 1.5,
+          opacity: 0.8,
+          fillOpacity: 0.5,
+          className: activeScoringMode === 'volume' ? 'glowing-marker' : 'glowing-marker-cyan'
+        });
+
+        // Add popup tooltip
+        let popupContent = '';
+        if (activeScoringMode === 'volume') {
+          popupContent = `
+            <div class="popup-header">
+              <h3>${h.junction !== 'No Junction' ? h.junction : h.location.split(',')[0]}</h3>
+              <p>${h.location}</p>
+            </div>
+            <div class="popup-body">
+              <div class="popup-row">
+                <span>Police Jurisdiction:</span>
+                <strong>${h.police_station} PS</strong>
+              </div>
+              <div class="popup-row">
+                <span>Violations (Filtered):</span>
+                <strong class="popup-badge">${formatNum(item.count)}</strong>
+              </div>
+              <div class="popup-row">
+                <span>Dominant Violation:</span>
+                <strong>${h.dominant_violation}</strong>
+              </div>
+              <div class="popup-row">
+                <span>Dominant Vehicle:</span>
+                <strong>${h.dominant_vehicle}</strong>
+              </div>
+              <div class="popup-row">
+                <span>Approval Rate:</span>
+                <strong>${formatPct(appRate)}</strong>
+              </div>
+              <div class="popup-row">
+                <span>Repeat Offense Rate:</span>
+                <strong>${formatPct(h.repeat_rate)}</strong>
+              </div>
+              <div class="popup-row" style="margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px;">
+                <span>Priority Score:</span>
+                <strong class="popup-score">${score.toFixed(1)} / 100</strong>
+              </div>
+            </div>
+          `;
+        } else {
+          // Congestion Mode Tooltip
+          popupContent = `
+            <div class="popup-header" style="background: linear-gradient(135deg, rgba(0, 242, 254, 0.15), rgba(15, 23, 42, 0.8));">
+              <h3>${h.junction !== 'No Junction' ? h.junction : h.location.split(',')[0]}</h3>
+              <p>${h.location}</p>
+            </div>
+            <div class="popup-body">
+              <div class="popup-row">
+                <span>Police Jurisdiction:</span>
+                <strong>${h.police_station} PS</strong>
+              </div>
+              <div class="popup-row">
+                <span>Nearest Road:</span>
+                <strong style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;" title="${h.road_name}">${h.road_name}</strong>
+              </div>
+              <div class="popup-row">
+                <span>Road Capacity Tag:</span>
+                <strong class="popup-badge" style="background: rgba(0, 242, 254, 0.08); color: var(--color-secondary);">${h.highway_type} (${h.lanes} lanes)</strong>
+              </div>
+              <div class="popup-row">
+                <span>Peak Rush Overlap:</span>
+                <strong>${formatPct(item.peakOverlap)} (rush logs)</strong>
+              </div>
+              <div class="popup-row">
+                <span>Nearby Hubs (300m):</span>
+                <strong>${h.poi_count} metro/bus/malls</strong>
+              </div>
+              <div class="popup-row">
+                <span>Violations (Filtered):</span>
+                <strong>${formatNum(item.count)}</strong>
+              </div>
+              <div class="popup-row" style="margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px;">
+                <span style="color: var(--color-secondary); font-weight: 600;">Congestion Impact:</span>
+                <strong class="popup-score" style="color: var(--color-secondary) !important;">${item.congestionScore.toFixed(1)} / 100</strong>
+              </div>
+              <div style="font-size: 8px; color: var(--text-muted); margin-top: 4px; line-height: 1.2; font-family: monospace; background: rgba(0,0,0,0.15); padding: 4px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.02);">
+                Dens:${(item.count/2512.0).toFixed(2)} × Narrow:${h.narrowness_norm.toFixed(2)} × Peak:${(1+item.peakOverlap).toFixed(2)} × POI:${(1+h.poi_score_norm).toFixed(2)}
+              </div>
+            </div>
+          `;
+        }
+        
+        marker.on('click', () => {
+          selectPredictionHotspot(item.idx);
+        });
+        
+        marker.bindPopup(popupContent);
+        hotspotMarkersGroup.addLayer(marker);
+      });
+    }
+
+    // Dynamic Police Station / Junction rankings
+    function updateRankings(data) {
+      const container = document.getElementById('ranking-list');
+      container.innerHTML = '';
+
+      if (activeRankingTab === 'patrol') {
+        renderPatrolSuggestions(data);
+        return;
+      }
+
+      const rankingData = {};
+
+      // Accumulate records by active ranking entity type
+      for (let i = 0; i < FILTER_RECORDS.length; i++) {
+        const rec = FILTER_RECORDS[i];
+        const hIdx = rec[0];
+        const stat = rec[5];
+        const count = rec[6];
+
+        const h = HOTSPOTS_DATA[hIdx];
+        
+        // Skip 'No Junction' for junction list
+        if (activeRankingTab === 'junction' && h.junction === 'No Junction') continue;
+        
+        const entityName = activeRankingTab === 'police_station' ? h.police_station : h.junction;
+
+        if (!rankingData[entityName]) {
+          // Initialize entity values based on pre-computed baseline properties where available
+          let baseline = null;
+          if (activeRankingTab === 'police_station') {
+            baseline = POLICE_STATIONS_DATA.find(p => p.name === entityName);
+          } else {
+            baseline = JUNCTIONS_DATA.find(j => j.name === entityName);
+          }
+
+          rankingData[entityName] = {
+            name: entityName,
+            count: 0,
+            approved: 0,
+            rejected: 0,
+            repeat_rate: baseline ? baseline.repeat_rate : 0.5,
+            dominant_vehicle: baseline ? baseline.dominant_vehicle : 'OTHERS',
+            dominant_violation: baseline ? baseline.dominant_violation : 'WRONG PARKING'
+          };
+        }
+
+        rankingData[entityName].count += count;
+        if (stat === 0) rankingData[entityName].approved += count;
+        else if (stat === 1) rankingData[entityName].rejected += count;
+      }
+
+      // Convert object to array and calculate score
+      const list = Object.values(rankingData);
+      
+      const maxVolumeCap = activeRankingTab === 'police_station' ? 1000.0 : 500.0;
+
+      list.forEach(item => {
+        const reviewed = item.approved + item.rejected;
+        item.approval_rate = reviewed > 0 ? (item.approved / reviewed) : SYSTEM_INFO.global_avg_approval;
+        
+        const volumeScore = Math.min(100.0, (item.count / maxVolumeCap) * 100.0);
+        item.day1_score = (0.40 * volumeScore) + (0.30 * item.approval_rate * 100.0) + (0.30 * item.repeat_rate * 100.0);
+        
+        let baseline = null;
+        if (activeRankingTab === 'police_station') {
+          baseline = POLICE_STATIONS_DATA.find(p => p.name === item.name);
+        } else {
+          baseline = JUNCTIONS_DATA.find(j => j.name === item.name);
+        }
+        item.congestion_score = baseline ? baseline.congestion_score : 0.0;
+
+        if (activeScoringMode === 'volume') {
+          item.score = item.day1_score;
+        } else {
+          item.score = item.congestion_score;
+        }
+      });
+
+      // Sort based on active ranking sort key
+      list.sort((a, b) => b[activeRankingSort] - a[activeRankingSort]);
+
+      // Show top 30 entities
+      const topList = list.slice(0, 30);
+
+      if (topList.length === 0) {
+        container.innerHTML = '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:20px;">No matching hotspots found.</div>';
+        return;
+      }
+
+      // Find max score or volume in current view for progress bar rendering
+      const maxVal = topList[0][activeRankingSort] || 1;
+
+      topList.forEach((item, index) => {
+        const rank = index + 1;
+        
+        // Progress bar percentage calculation
+        const percent = Math.min(100, Math.max(5, (item[activeRankingSort] / maxVal) * 100));
+        
+        const isSelected = (activeRankingTab === 'police_station' && activeFilters.police_stations.includes(item.name)) ||
+                            (activeRankingTab === 'junction' && activeFilters.junctions.includes(item.name));
+
+        const card = document.createElement('div');
+        card.className = `ranking-item ${isSelected ? 'selected' : ''}`;
+        
+        // Click action: zooms map to this location & filters dashboard to highlight its violations
+        card.onclick = () => {
+          selectRankingEntity(item.name);
+        };
+
+        // Format label and stats dynamically based on sorting metric
+        let displayVal = '';
+        let statsLabel = '';
+        const scoreLabel = activeScoringMode === 'volume' ? 'Priority' : 'Congestion';
+        const scoreVal = activeScoringMode === 'volume' ? item.day1_score : item.congestion_score;
+
+        if (activeRankingSort === 'score') {
+          displayVal = scoreVal.toFixed(1);
+          statsLabel = `Vol: ${formatNum(item.count)} | Appr: ${formatPct(item.approval_rate)}`;
+        } else if (activeRankingSort === 'count') {
+          displayVal = formatNum(item.count);
+          statsLabel = `${scoreLabel}: ${scoreVal.toFixed(1)} | Appr: ${formatPct(item.approval_rate)}`;
+        } else if (activeRankingSort === 'approval_rate') {
+          displayVal = formatPct(item.approval_rate);
+          statsLabel = `${scoreLabel}: ${scoreVal.toFixed(1)} | Vol: ${formatNum(item.count)}`;
+        } else if (activeRankingSort === 'repeat_rate') {
+          displayVal = formatPct(item.repeat_rate);
+          statsLabel = `${scoreLabel}: ${scoreVal.toFixed(1)} | Vol: ${formatNum(item.count)}`;
+        }
+
+        card.innerHTML = `
+          <div class="rank-item-header">
+            <div class="rank-num-name">
+              <div class="rank-badge">${rank}</div>
+              <div class="rank-name" title="${item.name}">${item.name}</div>
+            </div>
+            <div class="rank-score">${displayVal}</div>
+          </div>
+          <div class="rank-item-stats">
+            <span>${statsLabel}</span>
+            <span style="font-size: 9px; opacity:0.8;">${item.dominant_violation}</span>
+          </div>
+          <div class="rank-bar-bg">
+            <div class="rank-bar-fill" style="width: ${percent}%;"></div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      // Update dynamic explanation text
+      const explanationEl = document.getElementById('ranking-explanation');
+      if (explanationEl) {
+        let desc = '';
+        if (activeRankingSort === 'score') {
+          if (activeScoringMode === 'volume') {
+            desc = `Ranks jurisdictions by <strong>Operational Urgency</strong> (40% volume, 30% verification approval, 30% chronicity repeat rate).`;
+          } else {
+            desc = `Ranks jurisdictions by <strong>Potential Traffic Impact</strong> (mean score of contained hotspots, incorporating road narrowness, peak rush, and POI proximity).`;
+          }
+        } else if (activeRankingSort === 'count') {
+          desc = `Ranks jurisdictions by the <strong>Total Violations Count</strong> logged in the active filtered view.`;
+        } else if (activeRankingSort === 'approval_rate') {
+          desc = `Ranks jurisdictions by <strong>Verification Confidence</strong> (percentage of approved reports out of total reviewed).`;
+        } else if (activeRankingSort === 'repeat_rate') {
+          desc = `Ranks jurisdictions by <strong>Repeat Infractions</strong> (percentage of violations that occur on recurring days rather than a single event).`;
+        }
+        
+        explanationEl.innerHTML = `💡 <strong>${activeRankingSort.replace('_', ' ').toUpperCase()}:</strong> ${desc}<br><span style="font-size: 9px; opacity: 0.7; margin-top: 4px; display: block;">📊 <em>Progress bars show values relative to the top-ranked item in this view.</em></span>`;
+      }
+    }
+
+    function renderPatrolSuggestions(data) {
+      const container = document.getElementById('ranking-list');
+      
+      const currentHour = predictionSelectedHour;
+      const currentDOW = predictionSelectedDOW;
+      
+      const nextHour = (currentHour + 1) % 24;
+      const nextDOW = nextHour === 0 ? (currentDOW + 1) % 7 : currentDOW;
+      const nextHourStr = `${String(nextHour).padStart(2, '0')}:00`;
+      const weekdayName = CATEGORY_MAPS.weekdays[nextDOW];
+
+      // Update dynamic explanation text
+      const explanationEl = document.getElementById('ranking-explanation');
+      if (explanationEl) {
+        explanationEl.innerHTML = `💡 <strong>PATROL SPIKES:</strong> Recommends pre-positioning patrols for the next hour (<strong>${weekdayName} at ${nextHourStr}</strong>). Ranked by expected violation spikes scaled by road congestion impact.`;
+      }
+
+      // Filter and score hotspots
+      const suggestions = [];
+      for (let i = 0; i < HOTSPOTS_DATA.length; i++) {
+        const h = HOTSPOTS_DATA[i];
+        
+        // Skip if filtered out
+        if (data.hotspotCounts[i] === 0) continue;
+        
+        // Expected violation rate for next hour
+        const expectedRate = h.weekly_pattern ? (h.weekly_pattern[nextDOW][nextHour] || 0.0) : 0.0;
+        
+        // Combined score: expected rate * congestion score
+        const patrolPriority = expectedRate * h.congestion_score;
+        
+        if (expectedRate > 0.01) {
+          suggestions.push({
+            meta: h,
+            expectedRate: expectedRate,
+            priority: patrolPriority
+          });
+        }
+      }
+
+      // Sort descending
+      suggestions.sort((a, b) => b.priority - a.priority);
+
+      // Take top 30
+      const topSuggestions = suggestions.slice(0, 30);
+
+      if (topSuggestions.length === 0) {
+        container.innerHTML = '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:20px;">No patrol spike recommendations for this time window.</div>';
+        return;
+      }
+
+      const maxPriority = topSuggestions[0].priority || 1.0;
+
+      topSuggestions.forEach((item, index) => {
+        const h = item.meta;
+        const rank = index + 1;
+        const percent = Math.min(100, Math.max(5, (item.priority / maxPriority) * 100));
+        
+        const card = document.createElement('div');
+        card.className = 'ranking-item';
+        card.style.borderLeft = h.thinly_sampled ? '2px solid var(--color-warning)' : '2px solid var(--color-secondary)';
+        
+        card.onclick = () => {
+          map.flyTo([h.lat, h.lon], 16);
+          selectPredictionHotspot(h.id);
+        };
+
+        const locationTitle = h.road_name !== 'Unknown Road' ? h.road_name : h.location.split(',')[0];
+        const sampleWarning = h.thinly_sampled ? '<span style="color:var(--color-warning); font-size:8px;">[Thin Sample]</span>' : '';
+
+        card.innerHTML = `
+          <div class="rank-item-header">
+            <div class="rank-num-name">
+              <div class="rank-badge" style="background:${h.thinly_sampled ? 'rgba(245,158,11,0.1)' : 'rgba(0,242,254,0.1)'}; color:${h.thinly_sampled ? 'var(--color-warning)' : 'var(--color-secondary)'};">${rank}</div>
+              <div class="rank-name" title="${locationTitle}">${locationTitle} ${sampleWarning}</div>
+            </div>
+            <div class="rank-score" style="color:var(--color-secondary);">${item.priority.toFixed(1)}</div>
+          </div>
+          <div class="rank-item-stats">
+            <span>Exp Rate: ${item.expectedRate.toFixed(2)}/hr | Congestion: ${h.congestion_score.toFixed(1)}</span>
+            <span style="font-size: 8px; opacity:0.8;">${h.police_station} PS</span>
+          </div>
+          <div class="rank-bar-bg">
+            <div class="rank-bar-fill" style="width: ${percent}%; background: linear-gradient(to right, var(--color-secondary), ${h.thinly_sampled ? 'var(--color-warning)' : 'var(--color-success)'});"></div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function selectPredictionHotspot(id) {
+      selectedHotspotId = id;
+      const h = HOTSPOTS_DATA.find(item => item.id === id);
+      if (!h) return;
+
+      const entitySelect = document.getElementById('pred-entity-select');
+      if (entitySelect) {
+        entitySelect.value = 'map';
+        selectedPredictionEntity = { type: 'map', name: '' };
+      }
+
+      document.getElementById('prediction-placeholder').style.display = 'none';
+      document.getElementById('prediction-content').style.display = 'grid';
+
+      const labelEl = document.getElementById('prediction-hotspot-label');
+      labelEl.innerHTML = `📍 Hotspot #${h.id}: <strong style="color:var(--text-main);">${h.road_name !== 'Unknown Road' ? h.road_name : h.location}</strong> (${h.police_station} PS)`;
+
+      // Get DOW and hour from user-selected values
+      const currentHour = predictionSelectedHour;
+      const currentDOW = predictionSelectedDOW;
+      
+      const weekdayName = CATEGORY_MAPS.weekdays[currentDOW];
+      const pattern = h.weekly_pattern ? h.weekly_pattern[currentDOW] : new Array(24).fill(0);
+
+      // Update predictions chart data
+      chartPredictions.data.datasets[0].data = pattern;
+      
+      // Dynamic colors: highlight current hour and the next 3 hours (patrol window)
+      const colors = new Array(24).fill('rgba(0, 242, 254, 0.2)');
+      for (let i = 0; i < 4; i++) {
+        const targetHour = (currentHour + i) % 24;
+        colors[targetHour] = i === 0 ? 'rgba(255, 74, 90, 0.85)' : 'rgba(245, 158, 11, 0.75)'; // red for current, amber for next
+      }
+      chartPredictions.data.datasets[0].backgroundColor = colors;
+      chartPredictions.update();
+
+      // Show warnings
+      const warningEl = document.getElementById('prediction-sample-warning');
+      if (h.thinly_sampled) {
+        warningEl.style.display = 'block';
+      } else {
+        warningEl.style.display = 'none';
+      }
+
+      // Generate alert text
+      const alertEl = document.getElementById('prediction-alert-text');
+      const nextHour = (currentHour + 1) % 24;
+      const currentRate = pattern[currentHour] || 0.0;
+      const nextRate = pattern[nextHour] || 0.0;
+      
+      let alertText = '';
+      if (currentRate > 0.3 || nextRate > 0.3) {
+        const peakHourVal = pattern.indexOf(Math.max(...pattern));
+        alertText = `🚨 <strong>High Activity Warning:</strong> This location exhibits a strong spike pattern today. Violation rate is expected to be <strong>${currentRate.toFixed(2)}/hr</strong> now and <strong>${nextRate.toFixed(2)}/hr</strong> in the next hour. Pre-position patrols immediately. Peak activity historically occurs at <strong>${String(peakHourVal).padStart(2, '0')}:00</strong>.`;
+      } else {
+        alertText = `✅ <strong>Normal Activity expected:</strong> Predicted rate is <strong>${currentRate.toFixed(2)}/hr</strong> now and <strong>${nextRate.toFixed(2)}/hr</strong> in the next hour. No emergency spike expected, continue regular patrol route.`;
+      }
+      alertEl.innerHTML = alertText;
+    }
+
+    // Swaps between Police Station and Junction views
+    function switchRankingTab(tab) {
+      activeRankingTab = tab;
+      
+      // Update UI classes
+      const tabs = document.querySelectorAll('.ranking-tab');
+      tabs.forEach(btn => {
+        if (btn.textContent.toLowerCase().includes(tab.split('_')[0])) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+
+      // Reset specific entity filters
+      activeFilters.police_stations = [];
+      activeFilters.junctions = [];
+      
+      const psContainer = document.getElementById('multiselect-police-station');
+      if (psContainer) {
+        psContainer.querySelectorAll('.multiselect-dropdown input[type="checkbox"]').forEach(cb => cb.checked = false);
+        psContainer.querySelector('.multiselect-select').textContent = 'All Police Stations';
+      }
+      const juncContainer = document.getElementById('multiselect-junction');
+      if (juncContainer) {
+        juncContainer.querySelectorAll('.multiselect-dropdown input[type="checkbox"]').forEach(cb => cb.checked = false);
+        juncContainer.querySelector('.multiselect-select').textContent = 'All Junctions';
+      }
+
+      // Show/Hide sort controls for Patrol Spikes
+      const sortControls = document.querySelector('.ranking-sort-controls');
+      if (sortControls) {
+        if (tab === 'patrol') {
+          sortControls.style.display = 'none';
+        } else {
+          sortControls.style.display = 'flex';
+        }
+      }
+
+      updateDashboard();
+    }
+
+    // Handles toggle buttons for sorting the tables
+    function setRankingSort(sortKey) {
+      activeRankingSort = sortKey;
+
+      const buttons = document.querySelectorAll('.sort-btn');
+      buttons.forEach(btn => {
+        if (btn.getAttribute('onclick').includes(sortKey)) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+
+      updateDashboard();
+    }
+
+    // Interaction when clicking ranking card list
+    function selectRankingEntity(name) {
+      if (activeRankingTab === 'police_station') {
+        const container = document.getElementById('multiselect-police-station');
+        if (container) {
+          const checkboxes = container.querySelectorAll('.multiselect-dropdown input[type="checkbox"]');
+          checkboxes.forEach(cb => {
+            if (cb.value === name) {
+              cb.checked = !cb.checked;
+            } else {
+              cb.checked = false;
+            }
+          });
+          
+          // Clear junction filters
+          const juncContainer = document.getElementById('multiselect-junction');
+          if (juncContainer) {
+            juncContainer.querySelectorAll('.multiselect-dropdown input[type="checkbox"]').forEach(cb => cb.checked = false);
+            onMultiselectChange('junction');
+          }
+
+          onMultiselectChange('police-station');
+        }
+
+        // Fly to police station center
+        if (psCenters[name]) {
+          map.flyTo([psCenters[name].lat, psCenters[name].lon], 13.5);
+        }
+      } else {
+        const container = document.getElementById('multiselect-junction');
+        if (container) {
+          const checkboxes = container.querySelectorAll('.multiselect-dropdown input[type="checkbox"]');
+          checkboxes.forEach(cb => {
+            if (cb.value === name) {
+              cb.checked = !cb.checked;
+            } else {
+              cb.checked = false;
+            }
+          });
+
+          // Clear police station filters
+          const psContainer = document.getElementById('multiselect-police-station');
+          if (psContainer) {
+            psContainer.querySelectorAll('.multiselect-dropdown input[type="checkbox"]').forEach(cb => cb.checked = false);
+            onMultiselectChange('police-station');
+          }
+
+          onMultiselectChange('junction');
+        }
+
+        // Fly to junction center
+        if (juncCenters[name]) {
+          map.flyTo([juncCenters[name].lat, juncCenters[name].lon], 15.5);
+        }
+      }
+    }
+
+    // Initialize Chart.js instances
+    function initCharts() {
+      // 1. Hourly Chart
+      const ctxHours = document.getElementById('chart-hours').getContext('2d');
+      chartHours = new Chart(ctxHours, {
+        type: 'bar',
+        data: {
+          labels: Array.from({length: 24}, (_, i) => `${String(i).padStart(2, '0')}:00`),
+          datasets: [{
+            label: 'Violations by Hour (IST)',
+            data: new Array(24).fill(0),
+            backgroundColor: 'rgba(0, 242, 254, 0.45)',
+            borderColor: 'var(--color-secondary)',
+            borderWidth: 1.5,
+            borderRadius: 3,
+            hoverBackgroundColor: 'var(--color-primary)'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              titleColor: '#fff',
+              borderColor: 'rgba(255,255,255,0.1)',
+              borderWidth: 1
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: '#ffffff', font: { size: 9 } }
+            },
+            y: {
+              grid: { color: 'rgba(255,255,255,0.04)' },
+              ticks: { color: '#ffffff', font: { size: 9 } }
+            }
+          }
+        }
+      });
+
+      // 2. Vehicle Mix Bar Chart (Replaced Doughnut Chart)
+      const ctxVehicles = document.getElementById('chart-vehicles').getContext('2d');
+      chartVehicles = new Chart(ctxVehicles, {
+        type: 'bar',
+        data: {
+          labels: CATEGORY_MAPS.vehicles,
+          datasets: [{
+            data: new Array(CATEGORY_MAPS.vehicles.length).fill(0),
+            backgroundColor: [
+              '#ff4a5a', // SCOOTER
+              '#00f2fe', // CAR
+              '#10b981', // MOTORCYCLE
+              '#f59e0b', // PASSENGER AUTO
+              '#8b5cf6', // MAXI-CAB
+              '#64748b'  // OTHERS
+            ],
+            borderWidth: 1.5,
+            borderColor: '#0b0f19',
+            borderRadius: 3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.1)'
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: '#ffffff', font: { size: 8 } }
+            },
+            y: {
+              grid: { color: 'rgba(255,255,255,0.04)' },
+              ticks: { color: '#ffffff', font: { size: 9 } }
+            }
+          }
+        }
+      });
+
+      // 3. Validation Status pie chart
+      const ctxStatus = document.getElementById('chart-status').getContext('2d');
+      chartStatus = new Chart(ctxStatus, {
+        type: 'pie',
+        data: {
+          labels: ['Approved', 'Rejected', 'Pending Review'],
+          datasets: [{
+            data: [0, 0, 0],
+            backgroundColor: [
+              'rgba(16, 185, 129, 0.75)', // Approved
+              'rgba(239, 68, 68, 0.75)',   // Rejected
+              'rgba(245, 158, 11, 0.6)'    // Pending Review
+            ],
+            borderColor: [
+              'var(--color-success)',
+              'var(--color-rejected)',
+              'var(--color-warning)'
+            ],
+            borderWidth: 1.5
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: '#ffffff', font: { size: 9 }, boxWidth: 10 }
+            },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.1)'
+            }
+          }
+        }
+      });
+
+      // 4. Predictions Chart
+      const ctxPred = document.getElementById('chart-predictions').getContext('2d');
+      chartPredictions = new Chart(ctxPred, {
+        type: 'bar',
+        data: {
+          labels: Array.from({length: 24}, (_, i) => `${String(i).padStart(2, '0')}:00`),
+          datasets: [{
+            label: 'Predicted Violations / Hr',
+            data: new Array(24).fill(0),
+            backgroundColor: 'rgba(0, 242, 254, 0.2)',
+            borderColor: 'var(--color-secondary)',
+            borderWidth: 1.5,
+            borderRadius: 3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              titleColor: '#fff',
+              borderColor: 'rgba(255,255,255,0.1)',
+              borderWidth: 1
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: '#ffffff', font: { size: 9 } }
+            },
+            y: {
+              grid: { color: 'rgba(255,255,255,0.04)' },
+              ticks: { color: '#ffffff', font: { size: 9 } }
+            }
+          }
+        }
+      });
+    }
+
+    // Refresh chart datasets dynamically
+    function updateChartsData(data) {
+      // 1. Update Hour chart
+      chartHours.data.datasets[0].data = data.hourlyStats;
+      // Change colors dynamically for highlights
+      const hourPeakColors = data.hourlyStats.map((val, h) => {
+        if (h >= 8 && h <= 12) return 'rgba(16, 185, 129, 0.75)'; // green for daylight traffic peak
+        if (h >= 2 && h <= 5) return 'rgba(245, 158, 11, 0.7)'; // orange for logging sync peak
+        return 'rgba(0, 242, 254, 0.45)';
+      });
+      chartHours.data.datasets[0].backgroundColor = hourPeakColors;
+      chartHours.update();
+
+      // Update hour filter label
+      let activeFilterText = 'All Bengaluru';
+      if (activeFilters.police_stations.length > 0) {
+        activeFilterText = activeFilters.police_stations.length === 1 ? `${activeFilters.police_stations[0]} PS` : `${activeFilters.police_stations.length} PS Selected`;
+      } else if (activeFilters.junctions.length > 0) {
+        activeFilterText = activeFilters.junctions.length === 1 ? activeFilters.junctions[0] : `${activeFilters.junctions.length} Junctions Selected`;
+      }
+      document.getElementById('chart-hour-filtered-label').textContent = activeFilterText;
+
+      // 2. Update Vehicles mix
+      chartVehicles.data.datasets[0].data = data.vehicleStats;
+      chartVehicles.update();
+
+      // 3. Update Status Pie Chart
+      chartStatus.data.datasets[0].data = [
+        data.statusStats[0] || 0, // Approved
+        data.statusStats[1] || 0, // Rejected
+        data.statusStats[2] || 0  // Pending Review
+      ];
+      chartStatus.update();
+    }
+
+    function initPredictionDropdowns() {
+      const dowSelect = document.getElementById('pred-dow-select');
+      if (dowSelect) {
+        dowSelect.value = predictionSelectedDOW;
+      }
+      
+      const hourSelect = document.getElementById('pred-hour-select');
+      if (hourSelect) {
+        hourSelect.innerHTML = '';
+        for (let h = 0; h < 24; h++) {
+          const opt = document.createElement('option');
+          opt.value = h;
+          opt.textContent = `${String(h).padStart(2, '0')}:00`;
+          hourSelect.appendChild(opt);
+        }
+        hourSelect.value = predictionSelectedHour;
+      }
+
+      const entitySelect = document.getElementById('pred-entity-select');
+      if (entitySelect) {
+        entitySelect.innerHTML = '<option value="map">Selected Map Hotspot</option>';
+        
+        const psGroup = document.createElement('optgroup');
+        psGroup.label = 'Police Stations';
+        POLICE_STATIONS_DATA.forEach(ps => {
+          const opt = document.createElement('option');
+          opt.value = `ps:${ps.name}`;
+          opt.textContent = `${ps.name} PS`;
+          psGroup.appendChild(opt);
+        });
+        entitySelect.appendChild(psGroup);
+
+        const juncGroup = document.createElement('optgroup');
+        juncGroup.label = 'Junctions';
+        JUNCTIONS_DATA.forEach(junc => {
+          const opt = document.createElement('option');
+          opt.value = `junc:${junc.name}`;
+          opt.textContent = junc.name;
+          juncGroup.appendChild(opt);
+        });
+        entitySelect.appendChild(juncGroup);
+        entitySelect.value = 'map';
+      }
+    }
+
+    function onPredictionEntityChange() {
+      const select = document.getElementById('pred-entity-select');
+      if (!select) return;
+      
+      const val = select.value;
+      if (val === 'map') {
+        selectedPredictionEntity = { type: 'map', name: '' };
+        if (selectedHotspotId !== null) {
+          selectPredictionHotspot(selectedHotspotId);
+        } else {
+          document.getElementById('prediction-placeholder').style.display = 'block';
+          document.getElementById('prediction-content').style.display = 'none';
+          document.getElementById('prediction-hotspot-label').textContent = 'Select a hotspot on the map to load predictions';
+        }
+      } else {
+        const parts = val.split(':');
+        const type = parts[0];
+        const name = parts.slice(1).join(':');
+        selectedPredictionEntity = { type, name };
+        updatePredictionDisplayForEntity(type, name);
+      }
+    }
+
+    function updatePredictionDisplayForEntity(type, name) {
+      document.getElementById('prediction-placeholder').style.display = 'none';
+      document.getElementById('prediction-content').style.display = 'grid';
+
+      const labelEl = document.getElementById('prediction-hotspot-label');
+      const typeLabel = type === 'ps' ? 'Jurisdiction (PS)' : 'Junction Area';
+      labelEl.innerHTML = `📍 ${typeLabel}: <strong style="color:var(--text-main);">${name}</strong>`;
+
+      const currentHour = predictionSelectedHour;
+      const currentDOW = predictionSelectedDOW;
+      
+      const weekdayName = CATEGORY_MAPS.weekdays[currentDOW];
+      const agg = getAggregatedWeeklyPattern(type, name);
+      const pattern = agg.pattern[currentDOW];
+
+      chartPredictions.data.datasets[0].data = pattern;
+      
+      const colors = new Array(24).fill('rgba(0, 242, 254, 0.2)');
+      for (let i = 0; i < 4; i++) {
+        const targetHour = (currentHour + i) % 24;
+        colors[targetHour] = i === 0 ? 'rgba(255, 74, 90, 0.85)' : 'rgba(245, 158, 11, 0.75)';
+      }
+      chartPredictions.data.datasets[0].backgroundColor = colors;
+      chartPredictions.update();
+
+      const warningEl = document.getElementById('prediction-sample-warning');
+      if (agg.count < 3) {
+        warningEl.style.display = 'block';
+        warningEl.innerHTML = `⚠️ <strong>Sparse Entity Data:</strong> This ${type === 'ps' ? 'PS' : 'Junction'} contains only ${agg.count} hotspots. Prediction confidence is LOW.`;
+      } else {
+        warningEl.style.display = 'none';
+      }
+
+      const alertEl = document.getElementById('prediction-alert-text');
+      const nextHour = (currentHour + 1) % 24;
+      const currentRate = pattern[currentHour] || 0.0;
+      const nextRate = pattern[nextHour] || 0.0;
+      
+      let alertText = '';
+      if (currentRate > 0.5 || nextRate > 0.5) {
+        const peakHourVal = pattern.indexOf(Math.max(...pattern));
+        alertText = `🚨 <strong>High Activity Warning:</strong> This entire area exhibits a strong spike pattern today. Average violation rate across hotspots is expected to be <strong>${currentRate.toFixed(2)}/hr</strong> now and <strong>${nextRate.toFixed(2)}/hr</strong> in the next hour. Pre-position patrols immediately. Peak activity historically occurs at <strong>${String(peakHourVal).padStart(2, '0')}:00</strong>.`;
+      } else {
+        alertText = `✅ <strong>Normal Activity expected:</strong> Predicted rate is <strong>${currentRate.toFixed(2)}/hr</strong> now and <strong>${nextRate.toFixed(2)}/hr</strong> in the next hour. No emergency spike expected, continue regular patrol route.`;
+      }
+      alertEl.innerHTML = alertText;
+    }
+
+    function getAggregatedWeeklyPattern(type, name) {
+      const pattern = Array.from({length: 7}, () => new Array(24).fill(0));
+      let count = 0;
+      
+      for (let i = 0; i < HOTSPOTS_DATA.length; i++) {
+        const h = HOTSPOTS_DATA[i];
+        const match = type === 'ps' ? (h.police_station === name) : (h.junction === name);
+        
+        if (match && h.weekly_pattern) {
+          count++;
+          for (let dow = 0; dow < 7; dow++) {
+            for (let hr = 0; hr < 24; hr++) {
+              pattern[dow][hr] += h.weekly_pattern[dow][hr];
+            }
+          }
+        }
+      }
+      
+      if (count > 0) {
+        for (let dow = 0; dow < 7; dow++) {
+          for (let hr = 0; hr < 24; hr++) {
+            pattern[dow][hr] /= count;
+          }
+        }
+      }
+      return { pattern, count };
+    }
+
+    function onPredictionTimeChange() {
+      const dowSelect = document.getElementById('pred-dow-select');
+      const hourSelect = document.getElementById('pred-hour-select');
+      if (dowSelect && hourSelect) {
+        predictionSelectedDOW = parseInt(dowSelect.value);
+        predictionSelectedHour = parseInt(hourSelect.value);
+      }
+      
+      // Update patrol recommendations if that tab is active
+      if (activeRankingTab === 'patrol') {
+        updateRankings(getFilteredData());
+      }
+      
+      // Update predictions display
+      if (selectedPredictionEntity.type !== 'map') {
+        updatePredictionDisplayForEntity(selectedPredictionEntity.type, selectedPredictionEntity.name);
+      } else if (selectedHotspotId !== null) {
+        selectPredictionHotspot(selectedHotspotId);
+      }
+    }
+    
+    function resetPredictionTimeToNow() {
+      const now = new Date();
+      predictionSelectedHour = now.getHours();
+      predictionSelectedDOW = (now.getDay() + 6) % 7;
+      
+      const dowSelect = document.getElementById('pred-dow-select');
+      const hourSelect = document.getElementById('pred-hour-select');
+      if (dowSelect && hourSelect) {
+        dowSelect.value = predictionSelectedDOW;
+        hourSelect.value = predictionSelectedHour;
+      }
+      
+      onPredictionTimeChange();
+    }
+
+    // Handles switching scoring layers (Volume vs. Congestion)
+    function setScoringMode(mode) {
+      activeScoringMode = mode;
+      
+      const btnVol = document.getElementById('btn-mode-volume');
+      const btnCong = document.getElementById('btn-mode-congestion');
+      const sortBtnScore = document.getElementById('sort-btn-score');
+      
+      const legendDensityLabel = document.getElementById('legend-density-label');
+      const legendDotLabel = document.getElementById('legend-dot-label');
+      const legendDotIcon = document.getElementById('legend-dot-icon');
+      
+      if (mode === 'volume') {
+        btnVol.classList.add('active');
+        btnCong.classList.remove('active');
+        sortBtnScore.textContent = 'Priority';
+        
+        legendDensityLabel.textContent = 'Density:';
+        legendDotLabel.textContent = 'High-Priority Hotspots';
+        legendDotIcon.style.backgroundColor = 'var(--color-primary)';
+        legendDotIcon.style.boxShadow = '0 0 6px var(--color-primary)';
+        
+        document.getElementById('formula-desc').innerHTML = `
+          <strong>Composite Hotspot Score</strong>
+          Priority score is computed dynamically based on the active dataset:
+          <div style="margin-top: 6px; font-family: monospace; font-size: 10px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: 4px;">
+            0.4 * Vol + 0.3 * Appr + 0.3 * Chronic
+          </div>
+          <ul style="margin-top: 6px; padding-left: 14px; display: flex; flex-direction: column; gap: 4px; font-size: 10px;">
+            <li><strong>Volume (40%):</strong> Density, capped at 500.</li>
+            <li><strong>Approval (30%):</strong> Verification rate.</li>
+            <li><strong>Chronicity (30%):</strong> Non-peak-day activity share.</li>
+          </ul>
+        `;
+      } else {
+        btnVol.classList.remove('active');
+        btnCong.classList.add('active');
+        sortBtnScore.textContent = 'Congestion';
+        
+        legendDensityLabel.textContent = 'Congestion:';
+        legendDotLabel.textContent = 'High-Impact Hotspots';
+        legendDotIcon.style.backgroundColor = 'var(--color-secondary)';
+        legendDotIcon.style.boxShadow = '0 0 6px var(--color-secondary)';
+        
+        document.getElementById('formula-desc').innerHTML = `
+          <strong>Congestion Impact Score (Proxy)</strong>
+          Congestion threat score derived from physical road network attributes:
+          <div style="margin-top: 6px; font-family: monospace; font-size: 10px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: 4px; line-height: 1.3;">
+            Density * Narrowness * (1 + PeakOverlap) * (1 + POIs)
+          </div>
+          <ul style="margin-top: 6px; padding-left: 14px; display: flex; flex-direction: column; gap: 4px; font-size: 10px;">
+            <li><strong>Narrowness:</strong> Inverse of road capacity (type × lanes).</li>
+            <li><strong>Peak Overlap:</strong> Vol share in rush hours (8-11am, 5-8pm).</li>
+            <li><strong>POIs Proximity:</strong> Decay count of transit & markets.</li>
+          </ul>
+        `;
+      }
+      
+      updateDashboard();
+    }
+  </script>
+</body>
+</html>
