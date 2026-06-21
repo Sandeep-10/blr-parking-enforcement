@@ -2258,11 +2258,23 @@
         });
 
         // Add popup tooltip
-        let dispatchButtonHtml = `
-          <button onclick="dispatchPatrol(${item.idx})" style="background: var(--color-secondary); color:#07090e; border:none; border-radius:4px; padding: 6px 12px; font-weight:700; font-size:10px; cursor:pointer; width:100%; text-align:center; transition: all 0.2s;" onmouseover="this.style.filter='brightness(1.2)'" onmouseout="this.style.filter='none'">
-            ⚡ Dispatch Nearest Patrol
-          </button>
-        `;
+        const dispatchAvailable = checkDispatchAvailability(predictionSelectedDOW, predictionSelectedHour);
+        const weekdayName = CATEGORY_MAPS.weekdays[predictionSelectedDOW];
+        
+        let dispatchButtonHtml = '';
+        if (dispatchAvailable) {
+          dispatchButtonHtml = `
+            <button onclick="dispatchPatrol(${item.idx})" style="background: var(--color-secondary); color:#07090e; border:none; border-radius:4px; padding: 6px 12px; font-weight:700; font-size:10px; cursor:pointer; width:100%; text-align:center; transition: all 0.2s;" onmouseover="this.style.filter='brightness(1.2)'" onmouseout="this.style.filter='none'">
+              ⚡ Dispatch Nearest Patrol
+            </button>
+          `;
+        } else {
+          dispatchButtonHtml = `
+            <button disabled style="background: #475569; color:#cbd5e1; border:none; border-radius:4px; padding: 6px 12px; font-weight:700; font-size:10px; cursor:not-allowed; width:100%; text-align:center; opacity: 0.65;" title="Patrol pre-positioning is only available 1 hour prior to the forecasted violation time (${weekdayName} at ${String(predictionSelectedHour).padStart(2, '0')}:00)">
+              🔒 Dispatch Locked (1h prior only)
+            </button>
+          `;
+        }
 
         let popupContent = '';
         if (activeScoringMode === 'volume') {
@@ -2663,25 +2675,6 @@
         alertText = `✅ <strong>Normal Activity expected:</strong> Predicted rate is <strong>${currentRate.toFixed(2)}/hr</strong> now and <strong>${nextRate.toFixed(2)}/hr</strong> in the next hour. No emergency spike expected, continue regular patrol route.`;
       }
       if (alertEl) alertEl.innerHTML = alertText;
-
-      const dispatchContainer = document.getElementById('prediction-dispatch-btn-container');
-      if (dispatchContainer) {
-        const peakHourVal = pattern.indexOf(Math.max(...pattern));
-        const diff = (peakHourVal - currentHour + 24) % 24;
-        const isButtonVisible = diff === 1; // Only next 1 hr
-        if (isButtonVisible) {
-          const hIdx = HOTSPOTS_DATA.findIndex(item => item.id === id);
-          dispatchContainer.innerHTML = `
-            <button onclick="dispatchPatrol(${hIdx})"
-              style="background: var(--color-secondary); color:#07090e; border:none; border-radius:4px; padding:6px 12px; font-weight:700; font-size:10px; cursor:pointer; width:100%; text-align:center; transition:all 0.2s; margin-top:4px;"
-              onmouseover="this.style.filter='brightness(1.2)'"
-              onmouseout="this.style.filter='none'">
-              ⚡ Dispatch Nearest Patrol
-            </button>`;
-        } else {
-          dispatchContainer.innerHTML = '';
-        }
-      }
     }
 
     // Swaps between Police Station and Junction views
@@ -3067,43 +3060,6 @@
         alertText = `✅ <strong>Normal Activity expected:</strong> Predicted rate is <strong>${currentRate.toFixed(2)}/hr</strong> now and <strong>${nextRate.toFixed(2)}/hr</strong> in the next hour. No emergency spike expected, continue regular patrol route.`;
       }
       if (alertEl) alertEl.innerHTML = alertText;
-
-      const dispatchContainer = document.getElementById('prediction-dispatch-btn-container');
-      if (dispatchContainer) {
-        const peakHourVal = pattern.indexOf(Math.max(...pattern));
-        const diff = (peakHourVal - currentHour + 24) % 24;
-        const isButtonVisible = diff === 1; // Only next 1 hr
-        if (isButtonVisible) {
-          // Calculate correct DOW for peakHourVal
-          let targetDOW = currentDOW;
-          if (currentHour === 23 && peakHourVal === 0) {
-            targetDOW = (currentDOW + 1) % 7;
-          }
-          // Find hotspot in this PS/Junction with highest expected rate at the peak hour
-          let bestIdx = -1, bestRate = -1;
-          for (let i = 0; i < HOTSPOTS_DATA.length; i++) {
-            const hh = HOTSPOTS_DATA[i];
-            const match = type === 'ps' ? hh.police_station === name : hh.junction === name;
-            if (match && hh.weekly_pattern) {
-              const rate = hh.weekly_pattern[targetDOW][peakHourVal] || 0;
-              if (rate > bestRate) { bestRate = rate; bestIdx = i; }
-            }
-          }
-          if (bestIdx >= 0) {
-            dispatchContainer.innerHTML = `
-              <button onclick="dispatchPatrol(${bestIdx})"
-                style="background: var(--color-secondary); color:#07090e; border:none; border-radius:4px; padding:6px 12px; font-weight:700; font-size:10px; cursor:pointer; width:100%; text-align:center; transition:all 0.2s; margin-top:4px;"
-                onmouseover="this.style.filter='brightness(1.2)'"
-                onmouseout="this.style.filter='none'">
-                ⚡ Dispatch Nearest Patrol
-              </button>`;
-          } else {
-            dispatchContainer.innerHTML = '';
-          }
-        } else {
-          dispatchContainer.innerHTML = '';
-        }
-      }
     }
 
     function getAggregatedWeeklyPattern(type, name) {
@@ -3472,13 +3428,6 @@
         
         const isSelected = selectedPredictionEntity.type === 'ps' && selectedPredictionEntity.name === item.name;
         
-        // Calculate peak hour and diff for this station
-        const stationPattern = getAggregatedWeeklyPattern('ps', item.name).pattern[dow];
-        const peakHourVal = stationPattern.indexOf(Math.max(...stationPattern));
-        const diff = (peakHourVal - hr + 24) % 24;
-        const isNext1Hour = (diff === 1);
-        const showCardButton = isSelected && isNext1Hour;
-        
         const card = document.createElement('div');
         card.className = `top-station-forecast-card ${isSelected ? 'selected' : ''}`;
         card.style = `
@@ -3486,10 +3435,11 @@
           border: 1px solid ${isSelected ? 'var(--color-secondary)' : 'rgba(255, 255, 255, 0.04)'};
           box-shadow: ${isSelected ? '0 0 8px rgba(0, 242, 254, 0.2)' : 'none'};
           border-radius: 6px;
-          padding: 6px 10px;
+          padding: 4px 10px;
           display: flex;
-          flex-direction: column;
-          gap: 6px;
+          align-items: center;
+          justify-content: space-between;
+          height: 34px;
           font-size: 11px;
           transition: all 0.2s ease;
           cursor: pointer;
@@ -3505,36 +3455,26 @@
           updateTopStationsForecast(dow, hr);
         };
         
-        let cardContent = `
-          <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; height: 26px;">
-            <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1;">
-              <span style="display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 4px; font-weight: 700; color: var(--color-secondary); font-size: 9px; flex-shrink: 0;">${idx+1}</span>
-              <span style="font-weight: 500; color: var(--text-main); text-overflow: ellipsis; overflow: hidden;">${item.name} PS</span>
-            </div>
-            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0;">
-              <span style="font-weight: 700; color: var(--color-primary); font-family: var(--font-headers); font-size: 10px;">${item.value} cases</span>
-              <span style="font-size: 9px; color: var(--text-muted); font-weight: 500;">${ratioText} share</span>
-            </div>
+        card.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1;">
+            <span style="display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 4px; font-weight: 700; color: var(--color-secondary); font-size: 9px; flex-shrink: 0;">${idx+1}</span>
+            <span style="font-weight: 500; color: var(--text-main); text-overflow: ellipsis; overflow: hidden;">${item.name} PS</span>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0;">
+            <span style="font-weight: 700; color: var(--color-primary); font-family: var(--font-headers); font-size: 10px;">${item.value} cases</span>
+            <span style="font-size: 9px; color: var(--text-muted); font-weight: 500;">${ratioText} share</span>
           </div>
         `;
-        
-        if (showCardButton) {
-          cardContent += `
-            <button onclick="event.stopPropagation(); dispatchToJurisdiction('${item.name}')"
-              style="background: var(--color-secondary); color:#07090e; border:none; border-radius:4px; padding:6px 12px; font-weight:700; font-size:10px; cursor:pointer; width:100%; text-align:center; transition:all 0.2s;"
-              onmouseover="this.style.filter='brightness(1.2)'"
-              onmouseout="this.style.filter='none'">
-              ⚡ Dispatch Nearest Patrol
-            </button>
-          `;
-        }
-        
-        card.innerHTML = cardContent;
         container.appendChild(card);
       });
     }
 
     function dispatchToJurisdiction(stationName) {
+      if (!checkDispatchAvailability(predictionSelectedDOW, predictionSelectedHour)) {
+        const weekdayName = CATEGORY_MAPS.weekdays[predictionSelectedDOW];
+        alert(`Dispatch option is locked. Patrol pre-positioning is only available 1 hour prior to the forecasted violation time (${weekdayName} at ${String(predictionSelectedHour).padStart(2, '0')}:00).`);
+        return;
+      }
       const data = getFilteredData();
       let bestHotspotIdx = -1;
       let highestScore = -1;
