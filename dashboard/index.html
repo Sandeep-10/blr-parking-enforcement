@@ -2623,10 +2623,10 @@
 
       const dispatchContainer = document.getElementById('prediction-dispatch-btn-container');
       if (dispatchContainer) {
-        const nextHourLocal = (currentHour + 1) % 24;
         const peakHourVal = pattern.indexOf(Math.max(...pattern));
-        const isOneHourBefore = nextHourLocal === peakHourVal;
-        if (isOneHourBefore) {
+        const diff = (peakHourVal - currentHour + 24) % 24;
+        const isButtonVisible = diff === 0 || diff === 1;
+        if (isButtonVisible) {
           const hIdx = HOTSPOTS_DATA.findIndex(item => item.id === id);
           dispatchContainer.innerHTML = `
             <button onclick="dispatchPatrol(${hIdx})"
@@ -3029,18 +3029,22 @@
 
       const dispatchContainer = document.getElementById('prediction-dispatch-btn-container');
       if (dispatchContainer) {
-        const nextHourLocal = (currentHour + 1) % 24;
-        const nextDOWLocal = nextHourLocal === 0 ? (currentDOW + 1) % 7 : currentDOW;
         const peakHourVal = pattern.indexOf(Math.max(...pattern));
-        const isOneHourBefore = nextHourLocal === peakHourVal;
-        if (isOneHourBefore) {
-          // Find hotspot in this PS/Junction with highest next-hour expected rate
+        const diff = (peakHourVal - currentHour + 24) % 24;
+        const isButtonVisible = diff === 0 || diff === 1;
+        if (isButtonVisible) {
+          // Calculate correct DOW for peakHourVal
+          let targetDOW = currentDOW;
+          if (currentHour === 23 && peakHourVal === 0) {
+            targetDOW = (currentDOW + 1) % 7;
+          }
+          // Find hotspot in this PS/Junction with highest expected rate at the peak hour
           let bestIdx = -1, bestRate = -1;
           for (let i = 0; i < HOTSPOTS_DATA.length; i++) {
             const hh = HOTSPOTS_DATA[i];
             const match = type === 'ps' ? hh.police_station === name : hh.junction === name;
             if (match && hh.weekly_pattern) {
-              const rate = hh.weekly_pattern[nextDOWLocal][nextHourLocal] || 0;
+              const rate = hh.weekly_pattern[targetDOW][peakHourVal] || 0;
               if (rate > bestRate) { bestRate = rate; bestIdx = i; }
             }
           }
