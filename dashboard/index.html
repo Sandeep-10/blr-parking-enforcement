@@ -2258,23 +2258,11 @@
         });
 
         // Add popup tooltip
-        const dispatchAvailable = checkDispatchAvailability(predictionSelectedDOW, predictionSelectedHour);
-        const weekdayName = CATEGORY_MAPS.weekdays[predictionSelectedDOW];
-        
-        let dispatchButtonHtml = '';
-        if (dispatchAvailable) {
-          dispatchButtonHtml = `
-            <button onclick="dispatchPatrol(${item.idx})" style="background: var(--color-secondary); color:#07090e; border:none; border-radius:4px; padding: 6px 12px; font-weight:700; font-size:10px; cursor:pointer; width:100%; text-align:center; transition: all 0.2s;" onmouseover="this.style.filter='brightness(1.2)'" onmouseout="this.style.filter='none'">
-              ⚡ Dispatch Nearest Patrol
-            </button>
-          `;
-        } else {
-          dispatchButtonHtml = `
-            <button disabled style="background: #475569; color:#cbd5e1; border:none; border-radius:4px; padding: 6px 12px; font-weight:700; font-size:10px; cursor:not-allowed; width:100%; text-align:center; opacity: 0.65;" title="Patrol pre-positioning is only available 1 hour prior to the forecasted violation time (${weekdayName} at ${String(predictionSelectedHour).padStart(2, '0')}:00)">
-              🔒 Dispatch Locked (1h prior only)
-            </button>
-          `;
-        }
+        let dispatchButtonHtml = `
+          <button onclick="dispatchPatrol(${item.idx})" style="background: var(--color-secondary); color:#07090e; border:none; border-radius:4px; padding: 6px 12px; font-weight:700; font-size:10px; cursor:pointer; width:100%; text-align:center; transition: all 0.2s;" onmouseover="this.style.filter='brightness(1.2)'" onmouseout="this.style.filter='none'">
+            ⚡ Dispatch Nearest Patrol
+          </button>
+        `;
 
         let popupContent = '';
         if (activeScoringMode === 'volume') {
@@ -2675,6 +2663,25 @@
         alertText = `✅ <strong>Normal Activity expected:</strong> Predicted rate is <strong>${currentRate.toFixed(2)}/hr</strong> now and <strong>${nextRate.toFixed(2)}/hr</strong> in the next hour. No emergency spike expected, continue regular patrol route.`;
       }
       if (alertEl) alertEl.innerHTML = alertText;
+
+      const dispatchContainer = document.getElementById('prediction-dispatch-btn-container');
+      if (dispatchContainer) {
+        const peakHourVal = pattern.indexOf(Math.max(...pattern));
+        const diff = (peakHourVal - currentHour + 24) % 24;
+        const isButtonVisible = diff === 0 || diff === 1 || diff === 23;
+        if (isButtonVisible) {
+          const hIdx = HOTSPOTS_DATA.findIndex(item => item.id === id);
+          dispatchContainer.innerHTML = `
+            <button onclick="dispatchPatrol(${hIdx})"
+              style="background: var(--color-secondary); color:#07090e; border:none; border-radius:4px; padding:6px 12px; font-weight:700; font-size:10px; cursor:pointer; width:100%; text-align:center; transition:all 0.2s; margin-top:4px;"
+              onmouseover="this.style.filter='brightness(1.2)'"
+              onmouseout="this.style.filter='none'">
+              ⚡ Dispatch Nearest Patrol
+            </button>`;
+        } else {
+          dispatchContainer.innerHTML = '';
+        }
+      }
     }
 
     // Swaps between Police Station and Junction views
@@ -3060,6 +3067,43 @@
         alertText = `✅ <strong>Normal Activity expected:</strong> Predicted rate is <strong>${currentRate.toFixed(2)}/hr</strong> now and <strong>${nextRate.toFixed(2)}/hr</strong> in the next hour. No emergency spike expected, continue regular patrol route.`;
       }
       if (alertEl) alertEl.innerHTML = alertText;
+
+      const dispatchContainer = document.getElementById('prediction-dispatch-btn-container');
+      if (dispatchContainer) {
+        const peakHourVal = pattern.indexOf(Math.max(...pattern));
+        const diff = (peakHourVal - currentHour + 24) % 24;
+        const isButtonVisible = diff === 0 || diff === 1 || diff === 23;
+        if (isButtonVisible) {
+          // Calculate correct DOW for peakHourVal
+          let targetDOW = currentDOW;
+          if (currentHour === 23 && peakHourVal === 0) {
+            targetDOW = (currentDOW + 1) % 7;
+          }
+          // Find hotspot in this PS/Junction with highest expected rate at the peak hour
+          let bestIdx = -1, bestRate = -1;
+          for (let i = 0; i < HOTSPOTS_DATA.length; i++) {
+            const hh = HOTSPOTS_DATA[i];
+            const match = type === 'ps' ? hh.police_station === name : hh.junction === name;
+            if (match && hh.weekly_pattern) {
+              const rate = hh.weekly_pattern[targetDOW][peakHourVal] || 0;
+              if (rate > bestRate) { bestRate = rate; bestIdx = i; }
+            }
+          }
+          if (bestIdx >= 0) {
+            dispatchContainer.innerHTML = `
+              <button onclick="dispatchPatrol(${bestIdx})"
+                style="background: var(--color-secondary); color:#07090e; border:none; border-radius:4px; padding:6px 12px; font-weight:700; font-size:10px; cursor:pointer; width:100%; text-align:center; transition:all 0.2s; margin-top:4px;"
+                onmouseover="this.style.filter='brightness(1.2)'"
+                onmouseout="this.style.filter='none'">
+                ⚡ Dispatch Nearest Patrol
+              </button>`;
+          } else {
+            dispatchContainer.innerHTML = '';
+          }
+        } else {
+          dispatchContainer.innerHTML = '';
+        }
+      }
     }
 
     function getAggregatedWeeklyPattern(type, name) {
@@ -3470,11 +3514,6 @@
     }
 
     function dispatchToJurisdiction(stationName) {
-      if (!checkDispatchAvailability(predictionSelectedDOW, predictionSelectedHour)) {
-        const weekdayName = CATEGORY_MAPS.weekdays[predictionSelectedDOW];
-        alert(`Dispatch option is locked. Patrol pre-positioning is only available 1 hour prior to the forecasted violation time (${weekdayName} at ${String(predictionSelectedHour).padStart(2, '0')}:00).`);
-        return;
-      }
       const data = getFilteredData();
       let bestHotspotIdx = -1;
       let highestScore = -1;
