@@ -2668,8 +2668,17 @@
       const dispatchContainer = document.getElementById('prediction-dispatch-btn-container');
       if (dispatchContainer) {
         const peakHourVal = pattern.indexOf(Math.max(...pattern));
-        const diff = (peakHourVal - currentHour + 24) % 24;
-        const isButtonVisible = diff === 0 || diff === 1 || diff === 23;
+        
+        const now = new Date();
+        const liveDOW = (now.getDay() + 6) % 7;
+        const liveHour = now.getHours();
+        const nextHourDOW = (liveHour === 23) ? (liveDOW + 1) % 7 : liveDOW;
+        const nextHour = (liveHour + 1) % 24;
+        
+        const isNextHourSelected = (predictionSelectedDOW === nextHourDOW && predictionSelectedHour === nextHour);
+        const isPeakMatchingSelectedHour = (peakHourVal === predictionSelectedHour);
+        const isButtonVisible = isNextHourSelected && isPeakMatchingSelectedHour;
+        
         if (isButtonVisible) {
           const hIdx = HOTSPOTS_DATA.findIndex(item => item.id === id);
           dispatchContainer.innerHTML = `
@@ -3072,8 +3081,17 @@
       const dispatchContainer = document.getElementById('prediction-dispatch-btn-container');
       if (dispatchContainer) {
         const peakHourVal = pattern.indexOf(Math.max(...pattern));
-        const diff = (peakHourVal - currentHour + 24) % 24;
-        const isButtonVisible = diff === 0 || diff === 1 || diff === 23;
+        
+        const now = new Date();
+        const liveDOW = (now.getDay() + 6) % 7;
+        const liveHour = now.getHours();
+        const nextHourDOW = (liveHour === 23) ? (liveDOW + 1) % 7 : liveDOW;
+        const nextHour = (liveHour + 1) % 24;
+        
+        const isNextHourSelected = (predictionSelectedDOW === nextHourDOW && predictionSelectedHour === nextHour);
+        const isPeakMatchingSelectedHour = (peakHourVal === predictionSelectedHour);
+        const isButtonVisible = isNextHourSelected && isPeakMatchingSelectedHour;
+        
         if (isButtonVisible) {
           // Calculate correct DOW for peakHourVal
           let targetDOW = currentDOW;
